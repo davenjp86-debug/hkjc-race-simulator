@@ -5,8 +5,8 @@ import plotly.express as px
 
 st.set_page_config(page_title="HKJC Race Simulator Pro", page_icon="🏇", layout="wide")
 
-st.title("🏇 HKJC Race Simulator Pro（自訂賽事版）")
-st.caption("直接喺表格入面填寫檔位同評分")
+st.title("🏇 HKJC Race Simulator Pro（最終版）")
+st.caption("直接喺表格編輯 + 儲存按鈕（解決第一次輸入變 None 問題）")
 
 # ==================== 自訂賽事 ====================
 st.subheader("📝 自訂賽事設定")
@@ -19,7 +19,6 @@ if st.button("🚀 生成賽事表格", type="primary"):
     st.session_state['race_name'] = race_name
     st.session_state['generated'] = True
     
-    # 初始化資料（評分同檔位預設空白）
     data = []
     for i in range(1, num_horses + 1):
         data.append({
@@ -35,9 +34,9 @@ if st.session_state.get('generated', False):
     df = st.session_state['df']
     
     st.subheader(f"📋 {race}（{len(df)}匹馬）")
-    st.caption("點擊表格內嘅數字位置，直接輸入新數值")
+    st.caption("編輯完後 → 請按下面「儲存更改」按鈕")
     
-    # 可直接編輯嘅表格
+    # 可編輯表格
     edited_df = st.data_editor(
         df,
         column_config={
@@ -51,15 +50,17 @@ if st.session_state.get('generated', False):
         num_rows="fixed"
     )
     
-    # 儲存編輯後嘅資料
-    st.session_state['df'] = edited_df
+    # 儲存更改按鈕（解決第一次輸入變 None 問題）
+    if st.button("💾 儲存更改", type="primary"):
+        st.session_state['df'] = edited_df
+        st.success("✅ 更改已儲存！")
+        st.rerun()
     
     # 過濾出賽馬匹
     active_horses = edited_df[edited_df["狀態"] == "出賽"].copy()
     
     if len(active_horses) >= 3:
         if st.button("🚀 開始 5000 次專業模擬", type="primary"):
-            # 只模擬有填寫檔位同評分嘅馬
             valid_horses = active_horses.dropna(subset=['檔位', '評分'])
             
             if len(valid_horses) < 3:
@@ -92,4 +93,4 @@ if st.session_state.get('generated', False):
 
 st.divider()
 
-st.caption("💡 操作提示：點擊表格內嘅數字位置 → 直接輸入新數值")
+st.caption("💡 操作提示：編輯完表格後 → 一定要按「儲存更改」按鈕")
