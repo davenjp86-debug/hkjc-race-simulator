@@ -6,7 +6,7 @@ import plotly.express as px
 st.set_page_config(page_title="HKJC Race Simulator Pro", page_icon="🏇", layout="wide")
 
 st.title("🏇 HKJC Race Simulator Pro（自訂賽事版）")
-st.caption("支援實力欄位")
+st.caption("欄位順序已調整")
 
 # ==================== 自訂賽事 ====================
 st.subheader("📝 自訂賽事設定")
@@ -23,15 +23,15 @@ if st.button("🚀 生成賽事", type="primary"):
     for i in range(1, num_horses + 1):
         data.append({
             "馬號": i,
+            "狀態": "出賽",
             "檔位": None,
             "負磅": None,
-            "狀態": "出賽",
-            "評分": None,
             "騎師質量": None,
+            "評分": None,
+            "實力": None,
             "近況": None,
             "穩定": None,
-            "跑法": "",
-            "實力": None
+            "跑法": ""
         })
     st.session_state['df'] = pd.DataFrame(data)
 
@@ -55,11 +55,17 @@ if st.session_state.get('generated', False):
     with col2:
         new_weight = st.number_input("負磅（100-140）", min_value=100, max_value=140, value=int(current['負磅']) if pd.notna(current['負磅']) else 120, step=1)
     with col3:
-        new_rating = st.number_input("評分（10-150）", min_value=10, max_value=150, value=int(current['評分']) if pd.notna(current['評分']) else 80, step=1)
-    with col4:
         new_jockey = st.number_input("騎師質量（1-10）", min_value=1, max_value=10, value=int(current['騎師質量']) if pd.notna(current['騎師質量']) else 5, step=1)
+    with col4:
+        new_rating = st.number_input("評分（10-150）", min_value=10, max_value=150, value=int(current['評分']) if pd.notna(current['評分']) else 80, step=1)
     with col5:
         new_power = st.number_input("實力（1-100）", min_value=1, max_value=100, value=int(current['實力']) if pd.notna(current['實力']) else 50, step=1)
+    
+    col6, col7 = st.columns(2)
+    with col6:
+        new_recent = st.number_input("近況（1-10）", min_value=1, max_value=10, value=int(current['近況']) if pd.notna(current['近況']) else 5, step=1)
+    with col7:
+        new_stable = st.number_input("穩定（1-10）", min_value=1, max_value=10, value=int(current['穩定']) if pd.notna(current['穩定']) else 5, step=1)
     
     new_status = st.selectbox("狀態", ["出賽", "退出", "落馬"], index=["出賽", "退出", "落馬"].index(current['狀態']))
     
@@ -70,9 +76,11 @@ if st.session_state.get('generated', False):
     if st.button("💾 更新這匹馬", type="primary"):
         df.loc[df['馬號'] == horse_num, '檔位'] = new_draw
         df.loc[df['馬號'] == horse_num, '負磅'] = new_weight
-        df.loc[df['馬號'] == horse_num, '評分'] = new_rating
         df.loc[df['馬號'] == horse_num, '騎師質量'] = new_jockey
+        df.loc[df['馬號'] == horse_num, '評分'] = new_rating
         df.loc[df['馬號'] == horse_num, '實力'] = new_power
+        df.loc[df['馬號'] == horse_num, '近況'] = new_recent
+        df.loc[df['馬號'] == horse_num, '穩定'] = new_stable
         df.loc[df['馬號'] == horse_num, '狀態'] = new_status
         df.loc[df['馬號'] == horse_num, '跑法'] = ", ".join(selected_styles) if selected_styles else ""
         st.session_state['df'] = df
@@ -89,19 +97,19 @@ if st.session_state.get('generated', False):
                 st.error("⚠️ 至少需要 3 匹馬填寫完整資料先可以模擬！")
             else:
                 valid_horses['實力分'] = (
-                    valid_horses['實力'] * 0.35 +
-                    valid_horses['評分']/valid_horses['評分'].max()*25 + 
-                    (15 - (valid_horses['檔位']-1)*0.5) +
-                    (valid_horses['負磅'] - 120) * -0.08 +
-                    valid_horses['騎師質量'] * 1.8 +
-                    valid_horses['近況'] * 1.4 +
-                    valid_horses['穩定'] * 1.1 +
-                    valid_horses['跑法'].apply(lambda x: len(str(x).split(", ")) * 1.0 if pd.notna(x) and str(x) else 0)
+                    valid_horses['實力'] * 0.30 +
+                    valid_horses['評分']/valid_horses['評分'].max()*20 + 
+                    (15 - (valid_horses['檔位']-1)*0.4) +
+                    (valid_horses['負磅'] - 120) * -0.06 +
+                    valid_horses['騎師質量'] * 1.5 +
+                    valid_horses['近況'] * 1.2 +
+                    valid_horses['穩定'] * 0.9 +
+                    valid_horses['跑法'].apply(lambda x: len(str(x).split(", ")) * 0.8 if pd.notna(x) and str(x) else 0)
                 ).round(1)
                 
                 results = []
                 for _ in range(5000):
-                    times = {row['馬號']: 70 - (row['實力分']-50)*0.08 + (row['檔位']-1)*0.1 + np.random.normal(0,1.2) 
+                    times = {row['馬號']: 70 - (row['實力分']-50)*0.08 + (row['檔位']-1)*0.08 + np.random.normal(0,1.0) 
                              for _, row in valid_horses.iterrows()}
                     winner = min(times, key=times.get)
                     results.append(winner)
@@ -123,4 +131,4 @@ if st.session_state.get('generated', False):
 
 st.divider()
 
-st.caption("💡 呢個版本第一次輸入就有效！")
+st.caption("💡 欄位順序已按照你要求調整！")
