@@ -6,7 +6,7 @@ import plotly.express as px
 st.set_page_config(page_title="HKJC Race Simulator Pro", page_icon="🏇", layout="wide")
 
 st.title("🏇 HKJC Race Simulator Pro（自訂賽事版）")
-st.caption("支援負磅 + 騎師質量 + 自由填寫")
+st.caption("支援負磅 + 騎師質量 + 近況 + 穩定 + 跑法")
 
 # ==================== 自訂賽事 ====================
 st.subheader("📝 自訂賽事設定")
@@ -27,7 +27,10 @@ if st.button("🚀 生成賽事表格", type="primary"):
             "負磅": None,
             "狀態": "出賽",
             "評分": None,
-            "騎師質量": None
+            "騎師質量": None,
+            "近況": None,
+            "穩定": None,
+            "跑法": None
         })
     st.session_state['df'] = pd.DataFrame(data)
 
@@ -36,9 +39,22 @@ if st.session_state.get('generated', False):
     df = st.session_state['df']
     
     st.subheader(f"📋 {race}（{len(df)}匹馬）")
-    st.caption("點擊表格內空白位置，直接輸入數字")
+    st.caption("點擊表格內空白位置，直接輸入或選擇")
     
-    # 可編輯表格（新增負磅 + 騎師質量）
+    # 9種跑法選項
+    running_styles = [
+        "🏹 大逃",
+        "🏹 逃放",
+        "🏹 前置",
+        "🏹 先行",
+        "🏹 居中",
+        "🏹 中後",
+        "🏹 留後",
+        "🏹 後上",
+        "🏹 後追"
+    ]
+    
+    # 可編輯表格
     edited_df = st.data_editor(
         df,
         column_config={
@@ -47,7 +63,10 @@ if st.session_state.get('generated', False):
             "負磅": st.column_config.NumberColumn("負磅", min_value=100, max_value=140),
             "狀態": st.column_config.SelectboxColumn("狀態", options=["出賽", "退出", "落馬"]),
             "評分": st.column_config.NumberColumn("評分", min_value=10, max_value=150),
-            "騎師質量": st.column_config.NumberColumn("騎師質量", min_value=1, max_value=10)
+            "騎師質量": st.column_config.NumberColumn("騎師質量", min_value=1, max_value=10),
+            "近況": st.column_config.NumberColumn("近況", min_value=1, max_value=10),
+            "穩定": st.column_config.NumberColumn("穩定", min_value=1, max_value=10),
+            "跑法": st.column_config.SelectboxColumn("跑法", options=running_styles)
         },
         hide_index=True,
         use_container_width=True,
@@ -63,22 +82,24 @@ if st.session_state.get('generated', False):
     
     if len(active_horses) >= 3:
         if st.button("🚀 開始 5000 次專業模擬", type="primary"):
-            valid_horses = active_horses.dropna(subset=['檔位', '評分', '負磅', '騎師質量'])
+            valid_horses = active_horses.dropna(subset=['檔位', '評分', '負磅', '騎師質量', '近況', '穩定', '跑法'])
             
             if len(valid_horses) < 3:
                 st.error("⚠️ 至少需要 3 匹馬填寫完整資料先可以模擬！")
             else:
-                # 計算實力分（加入負磅同騎師質量影響）
                 valid_horses['實力分'] = (
-                    valid_horses['評分']/valid_horses['評分'].max()*40 + 
-                    (15 - (valid_horses['檔位']-1)*0.7) +
-                    (valid_horses['負磅'] - 120) * -0.15 +           # 負磅越輕越好
-                    valid_horses['騎師質量'] * 2.5                    # 騎師質量越高越好
+                    valid_horses['評分']/valid_horses['評分'].max()*32 + 
+                    (15 - (valid_horses['檔位']-1)*0.55) +
+                    (valid_horses['負磅'] - 120) * -0.1 +
+                    valid_horses['騎師質量'] * 2.0 +
+                    valid_horses['近況'] * 1.6 +
+                    valid_horses['穩定'] * 1.3 +
+                    valid_horses['跑法'].apply(lambda x: running_styles.index(x) * -0.8 if pd.notna(x) else 0)
                 ).round(1)
                 
                 results = []
                 for _ in range(5000):
-                    times = {row['馬號']: 70 - (row['實力分']-50)*0.08 + (row['檔位']-1)*0.12 + np.random.normal(0,1.5) 
+                    times = {row['馬號']: 70 - (row['實力分']-50)*0.08 + (row['檔位']-1)*0.1 + np.random.normal(0,1.3) 
                              for _, row in valid_horses.iterrows()}
                     winner = min(times, key=times.get)
                     results.append(winner)
@@ -86,10 +107,10 @@ if st.session_state.get('generated', False):
                 win = pd.Series(results).value_counts().reset_index()
                 win.columns = ['馬號','勝出次數']
                 win['勝率%'] = (win['勝出次數']/5000*100).round(1)
-                win = win.merge(valid_horses[['馬號','檔位','負磅','評分','騎師質量']], on='馬號').sort_values('勝率%', ascending=False)
+                win = win.merge(valid_horses[['馬號','檔位','負磅','評分','騎師質量','近況','穩定','跑法']], on='馬號').sort_values('勝率%', ascending=False)
                 
                 st.subheader("📈 模擬結果（Top 5）")
-                st.dataframe(win.head(5)[['馬號','檔位','負磅','評分','騎師質量','勝率%']], use_container_width=True, hide_index=True)
+                st.dataframe(win.head(5)[['馬號','檔位','負磅','評分','跑法','勝率%']], use_container_width=True, hide_index=True)
                 
                 fig = px.bar(win.head(10), x='馬號', y='勝率%', title="模擬勝出率")
                 st.plotly_chart(fig, use_container_width=True)
@@ -100,4 +121,4 @@ if st.session_state.get('generated', False):
 
 st.divider()
 
-st.caption("💡 操作提示：點擊空白位置 → 輸入數字 → 按「儲存更改」")
+st.caption("💡 操作提示：點擊「跑法」欄位 → 選擇箭咀跑法 → 按「儲存更改」")
