@@ -6,16 +6,13 @@ import plotly.express as px
 st.set_page_config(page_title="HKJC Race Simulator Pro", page_icon="🏇", layout="wide")
 
 st.title("🏇 HKJC Race Simulator Pro（自訂賽事版）")
-st.caption("自訂馬匹數量 + 自由調檔位 + 自由改評分 + 模擬真實賽事")
+st.caption("自訂馬匹數量 + 自由調檔位 + 自由改評分")
 
 # ==================== 自訂賽事 ====================
 st.subheader("📝 自訂賽事設定")
 
-col1, col2 = st.columns(2)
-with col1:
-    num_horses = st.slider("出賽馬匹數量（5\~40匹）", min_value=5, max_value=40, value=14, step=1)
-with col2:
-    race_name = st.text_input("賽事名稱", value="沙田 第五班 1800米")
+num_horses = st.slider("出賽馬匹數量（5\~40匹）", min_value=5, max_value=40, value=14, step=1)
+race_name = st.text_input("賽事名稱", value="沙田 第五班 1800米")
 
 if st.button("🚀 生成賽事表格", type="primary"):
     st.session_state['num_horses'] = num_horses
@@ -28,7 +25,7 @@ if st.session_state.get('generated', False):
     
     st.subheader(f"📋 {race}（{num}匹馬）")
     
-    # 建立可編輯表格（無馬名欄）
+    # 建立簡單表格
     data = []
     for i in range(1, num + 1):
         data.append({
@@ -40,15 +37,9 @@ if st.session_state.get('generated', False):
     
     df = pd.DataFrame(data)
     
-    # 使用 st.data_editor（全部可編輯）
+    # 使用最簡單嘅 data_editor
     edited_df = st.data_editor(
         df,
-        column_config={
-            "馬號": st.column_config.NumberColumn("馬號", disabled=True, width="small"),
-            "檔位": st.column_config.NumberColumn("檔位", min_value=1, max_value=40, width="small"),
-            "狀態": st.column_config.SelectboxColumn("狀態", options=["出賽", "退出", "落馬"], width="small"),
-            "評分": st.column_config.NumberColumn("評分", min_value=1, max_value=120, width="small")
-        },
         hide_index=True,
         use_container_width=True,
         num_rows="fixed"
@@ -63,11 +54,9 @@ if st.session_state.get('generated', False):
         st.success(f"✅ 目前有 {len(active_horses)} 匹馬出賽")
         
         if st.button("🚀 開始 5000 次專業模擬", type="primary"):
-            # 計算實力分
             active_horses['實力分'] = (active_horses['評分']/active_horses['評分'].max()*45 + 
                                        (15 - (active_horses['檔位']-1)*0.8)).round(1)
             
-            # Monte Carlo 模擬
             results = []
             for _ in range(5000):
                 times = {row['馬號']: 70 - (row['實力分']-50)*0.08 + (row['檔位']-1)*0.12 + np.random.normal(0,1.6) 
@@ -83,11 +72,11 @@ if st.session_state.get('generated', False):
             st.subheader("📈 模擬結果（Top 5）")
             st.dataframe(win.head(5)[['馬號','檔位','評分','勝率%']], use_container_width=True, hide_index=True)
             
-            fig = px.bar(win.head(10), x='馬號', y='勝率%', title="模擬勝出率（按馬號）")
+            fig = px.bar(win.head(10), x='馬號', y='勝率%', title="模擬勝出率")
             st.plotly_chart(fig, use_container_width=True)
             
             st.success("✅ 模擬完成！")
 
 st.divider()
 
-st.caption("💡 提示：用手機 Chrome 開啟後，點擊右上角 ⋮ → 「加入主畫面」即可安裝做 App")
+st.caption("💡 手機使用提示：長按欄位數字 → 出現鍵盤後即可更改")
