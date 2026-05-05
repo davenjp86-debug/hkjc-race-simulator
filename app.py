@@ -6,7 +6,7 @@ import plotly.express as px
 st.set_page_config(page_title="HKJC Race Simulator Pro", page_icon="🏇", layout="wide")
 
 st.title("🏇 HKJC Race Simulator Pro（最終專業版）")
-st.caption("GNN + 馬場/距離/場地/天氣/班級/騎師 全因素模擬")
+st.caption("GNN + 全因素模擬 + 批量貼上資料")
 
 # ==================== 賽事資訊 ====================
 st.subheader("📝 賽事資訊")
@@ -37,8 +37,6 @@ with col2:
     
     weather = st.selectbox("天氣", ["晴天", "陰天", "小雨", "大雨"])
 
-num_horses = st.slider("出賽馬匹數量（4\~40匹）", min_value=4, max_value=40, value=8, step=1)
-
 if st.button("🚀 生成賽事", type="primary"):
     st.session_state['venue'] = venue
     st.session_state['track'] = track
@@ -46,11 +44,11 @@ if st.button("🚀 生成賽事", type="primary"):
     st.session_state['distance'] = distance
     st.session_state['rail'] = rail
     st.session_state['weather'] = weather
-    st.session_state['num_horses'] = num_horses
     st.session_state['generated'] = True
     
+    # 預設 8 匹馬（等用戶批量貼上）
     data = []
-    for i in range(1, num_horses + 1):
+    for i in range(1, 9):
         data.append({
             "馬號": i, "狀態": "出賽", "檔位": None, "負磅": None,
             "騎師質量": None, "實力": None,
@@ -64,9 +62,70 @@ if st.session_state.get('generated', False):
     df = st.session_state['df']
     st.dataframe(df, use_container_width=True, hide_index=True)
     
+    # ==================== 批量貼上馬匹資料 ====================
+    st.divider()
+    st.subheader("📋 批量貼上馬匹資料（從記事本複製）")
+    
+    st.info("請將你記事本嘅馬匹資料完整複製後貼上，系統會自動解析同套用。")
+    
+    batch_input = st.text_area("貼上馬匹資料", height=200, placeholder="例如：\n出賽，1, 123, 10, 55, 2, 3, 12\n出賽，2, 124, 3, 12, 2, 3, 234")
+    
+    if st.button("🚀 套用批量資料", type="primary"):
+        if batch_input.strip() == "":
+            st.error("⚠️ 請先貼上資料！")
+        else:
+            try:
+                lines = [line.strip() for line in batch_input.strip().split('\n') if line.strip()]
+                new_data = []
+                
+                for line in lines:
+                    parts = [p.strip() for p in line.split(',')]
+                    
+                    if len(parts) >= 8:
+                        horse_num = int(parts[1])
+                        status = parts[0]
+                        draw = int(parts[2])
+                        weight = int(parts[3])
+                        jockey = int(parts[4])
+                        power = int(parts[5])
+                        recent = int(parts[6])
+                        stable = int(parts[7])
+                        
+                        run_code = parts[8] if len(parts) > 8 else ""
+                        run_map = {
+                            "1": "🏹 大逃", "2": "🏹 逃放", "3": "🏹 前置",
+                            "4": "🏹 先行", "5": "🏹 居中", "6": "🏹 中後",
+                            "7": "🏹 留後", "8": "🏹 後上", "9": "🏹 後追"
+                        }
+                        run_style = run_map.get(run_code, "")
+                        
+                        new_data.append({
+                            "馬號": horse_num,
+                            "狀態": status,
+                            "檔位": draw,
+                            "負磅": weight,
+                            "騎師質量": jockey,
+                            "實力": power,
+                            "近況": recent,
+                            "穩定": stable,
+                            "跑法": run_style
+                        })
+                
+                if new_data:
+                    st.session_state['df'] = pd.DataFrame(new_data)
+                    st.success(f"✅ 已成功套用 {len(new_data)} 匹馬嘅資料！")
+                    st.rerun()
+                else:
+                    st.error("⚠️ 未能解析到有效資料，請檢查格式！")
+                    
+            except Exception as e:
+                st.error(f"⚠️ 解析失敗：{str(e)}")
+    
+    # ==================== 編輯馬匹資料 ====================
     st.divider()
     st.subheader("✏️ 編輯馬匹資料")
     
+    df = st.session_state['df']
     horse_num = st.selectbox("選擇馬號", df['馬號'].tolist())
     current = df[df['馬號'] == horse_num].iloc[0]
     
@@ -106,7 +165,7 @@ if st.session_state.get('generated', False):
             if len(valid_horses) < 3:
                 st.error("⚠️ 至少需要 3 匹馬填寫完整資料先可以模擬！")
             else:
-                # ==================== GNN + 全因素增強 ====================
+                # GNN + 全因素
                 valid_horses = valid_horses.copy()
                 
                 base_score = (
@@ -159,7 +218,6 @@ if st.session_state.get('generated', False):
                             score += (row['穩定'] - 50) * 0.03
                     
                     if race_class in ["一級賽", "二級賽"]:
-                        score += (row['實力'] + row['評分'] - 120) * 0.03 if '評分' in row else 0
                         if "後上" in str(row['跑法']) or "後追" in str(row['跑法']): score -= 1.0
                     elif race_class in ["四班", "五班"]:
                         if "後上" in str(row['跑法']) or "後追" in str(row['跑法']): score += 2.0
@@ -231,4 +289,4 @@ if st.session_state.get('generated', False):
         st.warning("⚠️ 至少需要 3 匹出賽馬先可以模擬！")
 
 st.divider()
-st.caption("💡 最終專業版：全因素模擬（馬場/距離/場地/天氣/班級/騎師/GNN）")
+st.caption("💡 最終專業版：全因素模擬 + 批量貼上資料")
