@@ -8,7 +8,7 @@ st.set_page_config(page_title="HKJC Race Simulator Pro", page_icon="🏇", layou
 st.title("🏇 HKJC Race Simulator Pro（專業版）")
 st.caption("真實賽事資訊 + 智能模擬")
 
-# ==================== 模擬函數（放喺最前面） ====================
+# ==================== 模擬函數 ====================
 def run_simulation(active_horses, num_runs, session_state):
     valid_horses = active_horses.dropna(subset=['檔位', '評分', '負磅', '騎師質量', '近況', '穩定', '實力'])
     
@@ -46,8 +46,16 @@ def run_simulation(active_horses, num_runs, session_state):
         win = win.merge(valid_horses[['馬號','檔位','負磅','評分','實力','跑法']], on='馬號').sort_values('勝率%', ascending=False)
         all_results.append(win)
     
-    avg_win = pd.concat(all_results).groupby('馬號').mean().reset_index()
-    avg_win = avg_win.merge(valid_horses[['馬號','檔位','負磅','評分','實力','跑法']], on='馬號').sort_values('勝率%', ascending=False)
+    # 修復版：只平均數值欄位
+    avg_win = pd.concat(all_results).groupby('馬號').agg({
+        '勝出次數': 'mean',
+        '勝率%': 'mean',
+        '檔位': 'first',
+        '負磅': 'first',
+        '評分': 'first',
+        '實力': 'first',
+        '跑法': 'first'
+    }).reset_index().sort_values('勝率%', ascending=False)
     
     st.subheader(f"📈 {num_runs}次模擬平均結果（Top 5）")
     st.dataframe(avg_win.head(5)[['馬號','檔位','負磅','評分','實力','跑法','勝率%']], use_container_width=True, hide_index=True)
