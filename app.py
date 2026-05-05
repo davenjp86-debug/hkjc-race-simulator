@@ -1,12 +1,12 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import streamlit.components.v1 as components
+import plotly.express as px
 
 st.set_page_config(page_title="HKJC Race Simulator Pro", page_icon="🏇", layout="wide")
 
-st.title("🏇 HKJC Race Simulator Pro（簡潔真實動畫版）")
-st.caption("馬號 + 跑道 Bar + 真實速度差異")
+st.title("🏇 HKJC Race Simulator Pro（純模擬版）")
+st.caption("真實賽事資訊 + 智能模擬（無動畫）")
 
 # ==================== 賽事資訊 ====================
 st.subheader("📝 賽事資訊")
@@ -59,7 +59,7 @@ if st.button("🚀 生成賽事", type="primary"):
     st.session_state['df'] = pd.DataFrame(data)
 
 if st.session_state.get('generated', False):
-    st.success(f"✅ 賽事已設定：{st.session_state['venue']} {st.session_state['distance']}米")
+    st.success(f"✅ 賽事已設定：{st.session_state['venue']} {st.session_state['distance']}米 {st.session_state['race_class']}")
     
     df = st.session_state['df']
     st.dataframe(df, use_container_width=True, hide_index=True)
@@ -102,83 +102,47 @@ if st.session_state.get('generated', False):
     active_horses = df[df["狀態"] == "出賽"].copy()
     
     if len(active_horses) >= 3:
-        if st.button("🚀 1次專業模擬 + 真實動畫", type="primary"):
-            st.subheader("🏁 真實賽馬動畫")
-            
-            # 簡潔真實動畫
-            race_html = """
-            <div style="background: #0a3d0a; padding: 15px; border-radius: 15px; color: white; text-align: center;">
-                <h3>🏁 真實賽馬動畫</h3>
-                
-                <div style="background: #1a5f1a; padding: 12px; border-radius: 10px; margin: 12px 0;">
-                    <div style="position: relative; height: 80px; background: #2d7a2d; border-radius: 8px; overflow: hidden; border: 2px solid #ffd700;">
-                        
-                        <!-- 馬匹 Bar -->
-                        <div style="position: absolute; top: 8px; left: 5%; width: 8%; height: 12px; background: #ff4444; border-radius: 4px; animation: move1 4s linear forwards;">
-                            <span style="position: absolute; left: 50%; top: -18px; transform: translateX(-50%); font-size: 11px; font-weight: bold;">1</span>
-                        </div>
-                        
-                        <div style="position: absolute; top: 28px; left: 5%; width: 8%; height: 12px; background: #44ff44; border-radius: 4px; animation: move2 3.7s linear forwards;">
-                            <span style="position: absolute; left: 50%; top: -18px; transform: translateX(-50%); font-size: 11px; font-weight: bold;">2</span>
-                        </div>
-                        
-                        <div style="position: absolute; top: 48px; left: 5%; width: 8%; height: 12px; background: #4444ff; border-radius: 4px; animation: move3 4.3s linear forwards;">
-                            <span style="position: absolute; left: 50%; top: -18px; transform: translateX(-50%); font-size: 11px; font-weight: bold;">3</span>
-                        </div>
-                        
-                        <!-- 終點線 -->
-                        <div style="position: absolute; top: 0; right: 12%; width: 3px; height: 100%; background: #ffd700; box-shadow: 0 0 8px #ffd700;"></div>
-                    </div>
-                    
-                    <style>
-                        @keyframes move1 { 0% { left: 5%; } 100% { left: 82%; } }
-                        @keyframes move2 { 0% { left: 5%; } 100% { left: 85%; } }
-                        @keyframes move3 { 0% { left: 5%; } 100% { left: 78%; } }
-                    </style>
-                    
-                    <p style="margin-top: 10px; font-size: 14px;">🏇 馬匹全力競逐中...</p>
-                </div>
-            </div>
-            """
-            components.html(race_html, height=200)
-            
-            # 真正計算模擬結果
+        if st.button("🚀 1次專業模擬", type="primary"):
             valid_horses = active_horses.dropna(subset=['檔位', '評分', '負磅', '騎師質量', '近況', '穩定', '實力'])
             
-            valid_horses = valid_horses.copy()
-            valid_horses['實力分'] = (
-                valid_horses['實力'] * 0.30 +
-                valid_horses['評分']/valid_horses['評分'].max()*22 + 
-                (15 - (valid_horses['檔位']-1)*0.4) +
-                (valid_horses['負磅'] - 120) * -0.06 +
-                valid_horses['騎師質量'] * 1.5 +
-                valid_horses['近況'] * 1.2 +
-                valid_horses['穩定'] * 0.9 +
-                valid_horses['跑法'].apply(lambda x: len(str(x).split(", ")) * 0.8 if pd.notna(x) and str(x) else 0)
-            ).round(1)
-            
-            results = []
-            for _ in range(5000):
-                times = {row['馬號']: 70 - (row['實力分']-50)*0.08 + (row['檔位']-1)*0.08 + np.random.normal(0, 1.2) 
-                         for _, row in valid_horses.iterrows()}
-                winner = min(times, key=times.get)
-                results.append(winner)
-            
-            win = pd.Series(results).value_counts().reset_index()
-            win.columns = ['馬號','勝出次數']
-            win['勝率%'] = (win['勝出次數']/5000*100).round(1)
-            win = win.merge(valid_horses[['馬號','檔位','負磅','評分','實力','跑法']], on='馬號').sort_values('勝率%', ascending=False)
-            
-            st.subheader("📈 真實模擬結果（Top 5）")
-            st.dataframe(win.head(5)[['馬號','檔位','負磅','評分','實力','跑法','勝率%']], use_container_width=True, hide_index=True)
-            
-            fig = px.bar(win.head(10), x='馬號', y='勝率%', title="真實模擬勝出率")
-            st.plotly_chart(fig, use_container_width=True)
-            
-            st.success("✅ 模擬完成！結果已根據馬匹實力、跑法、檔位、負磅等真正計算。")
-            
+            if len(valid_horses) < 3:
+                st.error("⚠️ 至少需要 3 匹馬填寫完整資料先可以模擬！")
+            else:
+                # 真正計算
+                valid_horses = valid_horses.copy()
+                valid_horses['實力分'] = (
+                    valid_horses['實力'] * 0.30 +
+                    valid_horses['評分']/valid_horses['評分'].max()*22 + 
+                    (15 - (valid_horses['檔位']-1)*0.4) +
+                    (valid_horses['負磅'] - 120) * -0.06 +
+                    valid_horses['騎師質量'] * 1.5 +
+                    valid_horses['近況'] * 1.2 +
+                    valid_horses['穩定'] * 0.9 +
+                    valid_horses['跑法'].apply(lambda x: len(str(x).split(", ")) * 0.8 if pd.notna(x) and str(x) else 0)
+                ).round(1)
+                
+                # Monte Carlo 模擬
+                results = []
+                for _ in range(5000):
+                    times = {row['馬號']: 70 - (row['實力分']-50)*0.08 + (row['檔位']-1)*0.08 + np.random.normal(0, 1.2) 
+                             for _, row in valid_horses.iterrows()}
+                    winner = min(times, key=times.get)
+                    results.append(winner)
+                
+                win = pd.Series(results).value_counts().reset_index()
+                win.columns = ['馬號','勝出次數']
+                win['勝率%'] = (win['勝出次數']/5000*100).round(1)
+                win = win.merge(valid_horses[['馬號','檔位','負磅','評分','實力','跑法']], on='馬號').sort_values('勝率%', ascending=False)
+                
+                st.subheader("📈 真實模擬結果（Top 5）")
+                st.dataframe(win.head(5)[['馬號','檔位','負磅','評分','實力','跑法','勝率%']], use_container_width=True, hide_index=True)
+                
+                fig = px.bar(win.head(10), x='馬號', y='勝率%', title="真實模擬勝出率（已考慮所有因素）")
+                st.plotly_chart(fig, use_container_width=True)
+                
+                st.success("✅ 模擬完成！結果已根據馬匹實力、跑法、檔位、負磅等真正計算。")
     else:
         st.warning("⚠️ 至少需要 3 匹出賽馬先可以模擬！")
 
 st.divider()
-st.caption("💡 簡潔真實版：馬號 + 跑道 Bar + 真實速度！")
+st.caption("💡 純模擬版：穩定 + 真實結果！")
