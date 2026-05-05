@@ -6,7 +6,7 @@ import plotly.express as px
 st.set_page_config(page_title="HKJC Race Simulator Pro", page_icon="🏇", layout="wide")
 
 st.title("🏇 HKJC Race Simulator Pro（最終專業版）")
-st.caption("GNN + 全因素模擬 + 批量貼上資料")
+st.caption("GNN + 全因素模擬 + 批量貼上資料（自動修正範圍）")
 
 # ==================== 賽事資訊 ====================
 st.subheader("📝 賽事資訊")
@@ -46,7 +46,6 @@ if st.button("🚀 生成賽事", type="primary"):
     st.session_state['weather'] = weather
     st.session_state['generated'] = True
     
-    # 預設 8 匹馬（等用戶批量貼上）
     data = []
     for i in range(1, 9):
         data.append({
@@ -66,7 +65,7 @@ if st.session_state.get('generated', False):
     st.divider()
     st.subheader("📋 批量貼上馬匹資料（從記事本複製）")
     
-    st.info("請將你記事本嘅馬匹資料完整複製後貼上，系統會自動解析同套用。")
+    st.info("請將你記事本嘅馬匹資料完整複製後貼上，系統會自動解析同修正超出範圍嘅數值。")
     
     batch_input = st.text_area("貼上馬匹資料", height=200, placeholder="例如：\n出賽，1, 123, 10, 55, 2, 3, 12\n出賽，2, 124, 3, 12, 2, 3, 234")
     
@@ -83,13 +82,14 @@ if st.session_state.get('generated', False):
                     
                     if len(parts) >= 8:
                         horse_num = int(parts[1])
-                        status = parts[0]
-                        draw = int(parts[2])
-                        weight = int(parts[3])
-                        jockey = int(parts[4])
-                        power = int(parts[5])
-                        recent = int(parts[6])
-                        stable = int(parts[7])
+                        
+                        # 自動修正超出範圍嘅數值
+                        draw = max(1, min(40, int(parts[2])))
+                        weight = max(100, min(140, int(parts[3])))
+                        jockey = max(1, min(10, int(parts[4])))
+                        power = max(1, min(100, int(parts[5])))
+                        recent = max(1, min(10, int(parts[6])))
+                        stable = max(1, min(10, int(parts[7])))
                         
                         run_code = parts[8] if len(parts) > 8 else ""
                         run_map = {
@@ -101,7 +101,7 @@ if st.session_state.get('generated', False):
                         
                         new_data.append({
                             "馬號": horse_num,
-                            "狀態": status,
+                            "狀態": parts[0],
                             "檔位": draw,
                             "負磅": weight,
                             "騎師質量": jockey,
@@ -113,7 +113,7 @@ if st.session_state.get('generated', False):
                 
                 if new_data:
                     st.session_state['df'] = pd.DataFrame(new_data)
-                    st.success(f"✅ 已成功套用 {len(new_data)} 匹馬嘅資料！")
+                    st.success(f"✅ 已成功套用 {len(new_data)} 匹馬嘅資料！（已自動修正超出範圍嘅數值）")
                     st.rerun()
                 else:
                     st.error("⚠️ 未能解析到有效資料，請檢查格式！")
@@ -289,4 +289,4 @@ if st.session_state.get('generated', False):
         st.warning("⚠️ 至少需要 3 匹出賽馬先可以模擬！")
 
 st.divider()
-st.caption("💡 最終專業版：全因素模擬 + 批量貼上資料")
+st.caption("💡 最終專業版：全因素模擬 + 批量貼上資料（自動修正範圍）")
