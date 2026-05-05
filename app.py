@@ -6,7 +6,11 @@ import plotly.express as px
 st.set_page_config(page_title="HKJC Race Simulator Pro", page_icon="🏇", layout="wide")
 
 st.title("🏇 HKJC Race Simulator Pro（最終專業版）")
-st.caption("真實賽事資訊 + GNN增強 + 10次專業模擬 + 詳細名次統計")
+st.caption("GNN增強 + 10次模擬 + 真實結果輸入 + 自我學習 + 儲存讀取")
+
+# ==================== 初始化儲存 ====================
+if 'saved_races' not in st.session_state:
+    st.session_state['saved_races'] = []
 
 # ==================== 賽事資訊 ====================
 st.subheader("📝 賽事資訊")
@@ -57,9 +61,10 @@ if st.button("🚀 生成賽事", type="primary"):
             "近況": None, "穩定": None, "跑法": ""
         })
     st.session_state['df'] = pd.DataFrame(data)
+    st.session_state['real_results'] = {}
 
 if st.session_state.get('generated', False):
-    st.success(f"✅ 賽事已設定：{st.session_state['venue']} {st.session_state['distance']}米 {st.session_state['race_class']}")
+    st.success(f"✅ 賽事已設定：{st.session_state['venue']} {st.session_state['distance']}米")
     
     df = st.session_state['df']
     st.dataframe(df, use_container_width=True, hide_index=True)
@@ -108,9 +113,8 @@ if st.session_state.get('generated', False):
             if len(valid_horses) < 3:
                 st.error("⚠️ 至少需要 3 匹馬填寫完整資料先可以模擬！")
             else:
-                # ==================== GNN 增強實力分 ====================
+                # GNN增強
                 valid_horses = valid_horses.copy()
-                
                 base_score = (
                     valid_horses['實力'] * 0.28 +
                     valid_horses['評分']/valid_horses['評分'].max()*20 + 
@@ -123,18 +127,15 @@ if st.session_state.get('generated', False):
                 
                 def gnn_interaction(row):
                     score = 0
-                    if "大逃" in str(row['跑法']):
-                        score += 2.5
-                    if "後上" in str(row['跑法']) or "後追" in str(row['跑法']):
-                        score += 1.8
-                    if "居中" in str(row['跑法']):
-                        score += 1.5
+                    if "大逃" in str(row['跑法']): score += 2.5
+                    if "後上" in str(row['跑法']) or "後追" in str(row['跑法']): score += 1.8
+                    if "居中" in str(row['跑法']): score += 1.5
                     return score
                 
                 valid_horses['GNN_增強分'] = valid_horses.apply(gnn_interaction, axis=1)
                 valid_horses['實力分'] = (base_score + valid_horses['GNN_增強分'] * 0.6).round(1)
                 
-                # ==================== 10次專業模擬 + 詳細統計 ====================
+                # 10次模擬
                 all_results = []
                 for _ in range(10):
                     results = []
@@ -148,13 +149,7 @@ if st.session_state.get('generated', False):
                 # 統計
                 stats = {}
                 for horse in valid_horses['馬號']:
-                    stats[horse] = {
-                        '第一名次數': 0,
-                        '頭兩名內次數': 0,
-                        '頭三名內次數': 0,
-                        '頭四名內次數': 0,
-                        '總分數': 0
-                    }
+                    stats[horse] = {'第一名次數': 0, '頭兩名內次數': 0, '頭三名內次數': 0, '頭四名內次數': 0, '總分數': 0}
                 
                 for result in all_results:
                     for rank, horse in enumerate(result, 1):
@@ -176,12 +171,98 @@ if st.session_state.get('generated', False):
                 result_df.columns = ['馬號', '第一名次數', '頭兩名內次數', '頭三名內次數', '頭四名內次數', '總分數']
                 result_df = result_df.sort_values('總分數', ascending=False)
                 
+                st.session_state['simulation_result'] = result_df
                 st.subheader("📈 10次專業模擬結果")
                 st.dataframe(result_df, use_container_width=True, hide_index=True)
+                st.success("✅ 10次專業模擬完成！已結合GNN增強")
+    
+    # ==================== 真實賽事結果輸入 ====================
+    st.divider()
+    st.subheader("📝 輸入真實賽事結果")
+    
+    real_results = {}
+    for i in range(1, num_horses + 1):
+        real_results[i] = st.text_input(f"第 {i} 名馬號", value="", key=f"real_{i}")
+    
+    withdrawn = st.text_input("中途退出馬號（多個用逗號分隔）", value="")
+    
+    if st.button("💾 儲存真實結果", type="secondary"):
+        st.session_state['real_results'] = real_results
+        st.session_state['withdrawn'] = withdrawn
+        st.success("✅ 真實賽事結果已儲存！")
+    
+    # ==================== 賽後自我學習 ====================
+    if st.button("🧠 賽後自我學習", type="primary"):
+        if 'simulation_result' not in st.session_state or 'real_results' not in st.session_state:
+            st.error("⚠️ 請先進行模擬並輸入真實結果！")
+        else:
+            sim = st.session_state['simulation_result']
+            real = st.session_state['real_results']
+            
+            # 簡單學習：調整實力分
+            for horse in sim['馬號']:
+                real_rank = None
+                for rank, h in real.items():
+                    if str(h) == str(horse):
+                        real_rank = rank
+                        break
                 
-                st.success("✅ 10次專業模擬完成！已結合GNN增強 + 詳細名次統計")
-    else:
-        st.warning("⚠️ 至少需要 3 匹出賽馬先可以模擬！")
+                if real_rank:
+                    current_score = sim[sim['馬號'] == horse]['總分數'].values[0]
+                    if real_rank <= 3:
+                        # 真實表現好，增加實力
+                        df.loc[df['馬號'] == horse, '實力'] = min(100, int(df.loc[df['馬號'] == horse, '實力']) + 3)
+                    elif real_rank >= 7:
+                        # 真實表現差，降低實力
+                        df.loc[df['馬號'] == horse, '實力'] = max(1, int(df.loc[df['馬號'] == horse, '實力']) - 3)
+            
+            st.session_state['df'] = df
+            st.success("✅ 學習完成！模型已根據真實結果調整，會在下次模擬時生效。")
+    
+    # ==================== 儲存/讀取賽事 ====================
+    st.divider()
+    st.subheader("💾 儲存 / 讀取賽事")
+    
+    col_save, col_load = st.columns(2)
+    
+    with col_save:
+        save_label = st.text_input("儲存標籤（例如：沙田 1800米 第五班）")
+        if st.button("💾 儲存賽事"):
+            if len(st.session_state['saved_races']) >= 30:
+                st.session_state['saved_races'].pop(0)  # 刪除最舊
+            
+            save_data = {
+                'label': save_label,
+                'venue': st.session_state.get('venue'),
+                'track': st.session_state.get('track'),
+                'race_class': st.session_state.get('race_class'),
+                'distance': st.session_state.get('distance'),
+                'df': st.session_state.get('df'),
+                'simulation_result': st.session_state.get('simulation_result'),
+                'real_results': st.session_state.get('real_results', {})
+            }
+            st.session_state['saved_races'].append(save_data)
+            st.success(f"✅ 賽事已儲存！（目前 {len(st.session_state['saved_races'])}/30）")
+    
+    with col_load:
+        if st.session_state['saved_races']:
+            labels = [r['label'] for r in st.session_state['saved_races']]
+            selected = st.selectbox("選擇要讀取嘅賽事", labels)
+            
+            if st.button("📂 讀取賽事"):
+                for race in st.session_state['saved_races']:
+                    if race['label'] == selected:
+                        st.session_state['venue'] = race['venue']
+                        st.session_state['track'] = race['track']
+                        st.session_state['race_class'] = race['race_class']
+                        st.session_state['distance'] = race['distance']
+                        st.session_state['df'] = race['df']
+                        st.session_state['simulation_result'] = race['simulation_result']
+                        st.session_state['real_results'] = race['real_results']
+                        st.success(f"✅ 已讀取賽事：{selected}")
+                        st.rerun()
+        else:
+            st.info("暫時冇儲存嘅賽事")
 
 st.divider()
-st.caption("💡 最終專業版：GNN增強 + 10次模擬 + 詳細名次統計！")
+st.caption("💡 最終專業版：GNN + 10次模擬 + 真實結果 + 自我學習 + 儲存讀取！")
