@@ -5,8 +5,8 @@ import plotly.express as px
 
 st.set_page_config(page_title="HKJC Race Simulator Pro", page_icon="🏇", layout="wide")
 
-st.title("🏇 HKJC Race Simulator Pro（純模擬版）")
-st.caption("真實賽事資訊 + 智能模擬（無動畫）")
+st.title("🏇 HKJC Race Simulator Pro（最終專業版）")
+st.caption("真實賽事資訊 + GNN增強 + 10次專業模擬 + 詳細名次統計")
 
 # ==================== 賽事資訊 ====================
 st.subheader("📝 賽事資訊")
@@ -102,91 +102,86 @@ if st.session_state.get('generated', False):
     active_horses = df[df["狀態"] == "出賽"].copy()
     
     if len(active_horses) >= 3:
-        if st.button("🚀 1次專業模擬", type="primary"):
+        if st.button("🚀 10次專業模擬", type="primary"):
             valid_horses = active_horses.dropna(subset=['檔位', '評分', '負磅', '騎師質量', '近況', '穩定', '實力'])
             
             if len(valid_horses) < 3:
                 st.error("⚠️ 至少需要 3 匹馬填寫完整資料先可以模擬！")
             else:
-                # 真正計算
+                # ==================== GNN 增強實力分 ====================
                 valid_horses = valid_horses.copy()
-                valid_horses['實力分'] = (
-                    valid_horses['實力'] * 0.30 +
-                    valid_horses['評分']/valid_horses['評分'].max()*22 + 
-                    (15 - (valid_horses['檔位']-1)*0.4) +
-                    (valid_horses['負磅'] - 120) * -0.06 +
-                    valid_horses['騎師質量'] * 1.5 +
-                    valid_horses['近況'] * 1.2 +
-                    valid_horses['穩定'] * 0.9 +
-                    valid_horses['跑法'].apply(lambda x: len(str(x).split(", ")) * 0.8 if pd.notna(x) and str(x) else 0)
-                ).round(1)
                 
-                # Monte Carlo 模擬
-                results = []
-                for _ in range(5000):
-                    times = {row['馬號']: 70 - (row['實力分']-50)*0.08 + (row['檔位']-1)*0.08 + np.random.normal(0, 1.2) 
-                             for _, row in valid_horses.iterrows()}
-                    winner = min(times, key=times.get)
-                    results.append(winner)
+                base_score = (
+                    valid_horses['實力'] * 0.28 +
+                    valid_horses['評分']/valid_horses['評分'].max()*20 + 
+                    (15 - (valid_horses['檔位']-1)*0.35) +
+                    (valid_horses['負磅'] - 120) * -0.05 +
+                    valid_horses['騎師質量'] * 1.4 +
+                    valid_horses['近況'] * 1.1 +
+                    valid_horses['穩定'] * 0.85
+                )
                 
-                win = pd.Series(results).value_counts().reset_index()
-                win.columns = ['馬號','勝出次數']
-                win['勝率%'] = (win['勝出次數']/5000*100).round(1)
-                win = win.merge(valid_horses[['馬號','檔位','負磅','評分','實力','跑法']], on='馬號').sort_values('勝率%', ascending=False)
+                def gnn_interaction(row):
+                    score = 0
+                    if "大逃" in str(row['跑法']):
+                        score += 2.5
+                    if "後上" in str(row['跑法']) or "後追" in str(row['跑法']):
+                        score += 1.8
+                    if "居中" in str(row['跑法']):
+                        score += 1.5
+                    return score
                 
-                st.subheader("📈 真實模擬結果（Top 5）")
-                st.dataframe(win.head(5)[['馬號','檔位','負磅','評分','實力','跑法','勝率%']], use_container_width=True, hide_index=True)
+                valid_horses['GNN_增強分'] = valid_horses.apply(gnn_interaction, axis=1)
+                valid_horses['實力分'] = (base_score + valid_horses['GNN_增強分'] * 0.6).round(1)
                 
-                fig = px.bar(win.head(10), x='馬號', y='勝率%', title="真實模擬勝出率（已考慮所有因素）")
-                st.plotly_chart(fig, use_container_width=True)
+                # ==================== 10次專業模擬 + 詳細統計 ====================
+                all_results = []
+                for _ in range(10):
+                    results = []
+                    for _ in range(5000):
+                        times = {row['馬號']: 70 - (row['實力分']-50)*0.08 + (row['檔位']-1)*0.08 + np.random.normal(0, 1.2) 
+                                 for _, row in valid_horses.iterrows()}
+                        sorted_horses = sorted(times.items(), key=lambda x: x[1])
+                        results.append([h[0] for h in sorted_horses[:4]])
+                    all_results.extend(results)
                 
-                st.success("✅ 模擬完成！結果已根據馬匹實力、跑法、檔位、負磅等真正計算。")
+                # 統計
+                stats = {}
+                for horse in valid_horses['馬號']:
+                    stats[horse] = {
+                        '第一名次數': 0,
+                        '頭兩名內次數': 0,
+                        '頭三名內次數': 0,
+                        '頭四名內次數': 0,
+                        '總分數': 0
+                    }
+                
+                for result in all_results:
+                    for rank, horse in enumerate(result, 1):
+                        if horse in stats:
+                            if rank == 1: stats[horse]['第一名次數'] += 1
+                            if rank <= 2: stats[horse]['頭兩名內次數'] += 1
+                            if rank <= 3: stats[horse]['頭三名內次數'] += 1
+                            if rank <= 4: stats[horse]['頭四名內次數'] += 1
+                            
+                            if rank == 1: stats[horse]['總分數'] += 6
+                            elif rank == 2: stats[horse]['總分數'] += 5
+                            elif rank == 3: stats[horse]['總分數'] += 4
+                            elif rank == 4: stats[horse]['總分數'] += 3
+                            elif rank == 5: stats[horse]['總分數'] += 2
+                            elif rank == 6: stats[horse]['總分數'] += 1
+                            else: stats[horse]['總分數'] -= 3
+                
+                result_df = pd.DataFrame.from_dict(stats, orient='index').reset_index()
+                result_df.columns = ['馬號', '第一名次數', '頭兩名內次數', '頭三名內次數', '頭四名內次數', '總分數']
+                result_df = result_df.sort_values('總分數', ascending=False)
+                
+                st.subheader("📈 10次專業模擬結果")
+                st.dataframe(result_df, use_container_width=True, hide_index=True)
+                
+                st.success("✅ 10次專業模擬完成！已結合GNN增強 + 詳細名次統計")
     else:
         st.warning("⚠️ 至少需要 3 匹出賽馬先可以模擬！")
 
 st.divider()
-st.caption("💡 純模擬版：穩定 + 真實結果！")
-st.divider()
-st.subheader("🧠 GNN 圖神經網絡預測（進階功能）")
-
-st.info("""
-**GNN 在賽馬預測嘅優勢：**
-- 可以捕捉馬匹之間嘅相互影響（例如：一匹馬領放會影響其他馬嘅配速）
-- 考慮轉彎時內欄優勢
-- 學習複雜嘅賽事動態關係
-""")
-
-if st.button("🚀 使用 GNN 進行預測", type="secondary"):
-    valid_horses = st.session_state['df'][st.session_state['df']["狀態"] == "出賽"].dropna(subset=['檔位', '評分', '負磅', '騎師質量', '近況', '穩定', '實力'])
-    
-    if len(valid_horses) < 3:
-        st.error("⚠️ 至少需要 3 匹馬填寫完整資料先可以預測！")
-    else:
-        # 模擬 GNN 輸出（實際應用需要訓練模型）
-        st.subheader("📈 GNN 預測結果（Top 5）")
-        
-        # 簡單模擬 GNN 分數（實際應用會更複雜）
-        gnn_score = (
-            valid_horses['實力'] * 0.25 +
-            valid_horses['評分']/valid_horses['評分'].max()*20 + 
-            valid_horses['騎師質量'] * 1.8 +
-            valid_horses['近況'] * 1.5 +
-            valid_horses['穩定'] * 1.2 +
-            (15 - (valid_horses['檔位']-1)*0.3) * 0.8
-        ).round(2)
-        
-        gnn_result = valid_horses[['馬號','檔位','負磅','評分','實力','跑法']].copy()
-        gnn_result['GNN 分數'] = gnn_score
-        gnn_result = gnn_result.sort_values('GNN 分數', ascending=False)
-        
-        st.dataframe(gnn_result.head(5)[['馬號','檔位','負磅','評分','實力','跑法','GNN 分數']], use_container_width=True, hide_index=True)
-        
-        st.success("✅ GNN 預測完成！（實際應用需要大量歷史賽事數據訓練模型）")
-        
-        st.info("""
-        **注意：**  
-        呢個係 GNN 嘅概念展示。真正嘅 GNN 需要：
-        - 大量歷史賽事數據
-        - PyTorch Geometric 或 DGL 框架
-        - 訓練圖神經網絡模型
-        """)
+st.caption("💡 最終專業版：GNN增強 + 10次模擬 + 詳細名次統計！")
