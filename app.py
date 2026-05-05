@@ -6,8 +6,8 @@ import streamlit.components.v1 as components
 
 st.set_page_config(page_title="HKJC Race Simulator Pro", page_icon="🏇", layout="wide")
 
-st.title("🏇 HKJC Race Simulator Pro（專業動畫版）")
-st.caption("真實賽馬動畫 + 智能模擬")
+st.title("🏇 HKJC Race Simulator Pro（真實動畫版）")
+st.caption("出閘 + 位置爭奪 + 轉彎 + 衝刺動畫")
 
 # ==================== 賽事資訊 ====================
 st.subheader("📝 賽事資訊")
@@ -37,10 +37,8 @@ with col2:
         rail = "無"
     
     weather = st.selectbox("天氣", ["晴天", "陰天", "小雨", "大雨"])
-    hour = st.slider("時間（小時）", 0, 23, 14)
-    minute = st.slider("時間（分鐘）", 0, 59, 30)
 
-num_horses = st.slider("出賽馬匹數量（4\~40匹）", min_value=4, max_value=40, value=14, step=1)
+num_horses = st.slider("出賽馬匹數量（4\~40匹）", min_value=4, max_value=40, value=8, step=1)
 
 if st.button("🚀 生成賽事", type="primary"):
     st.session_state['venue'] = venue
@@ -62,7 +60,7 @@ if st.button("🚀 生成賽事", type="primary"):
     st.session_state['df'] = pd.DataFrame(data)
 
 if st.session_state.get('generated', False):
-    st.success(f"✅ 賽事已設定：{st.session_state['venue']} {st.session_state['distance']}米 {st.session_state['race_class']}")
+    st.success(f"✅ 賽事已設定：{st.session_state['venue']} {st.session_state['distance']}米")
     
     df = st.session_state['df']
     st.dataframe(df, use_container_width=True, hide_index=True)
@@ -106,41 +104,65 @@ if st.session_state.get('generated', False):
     
     if len(active_horses) >= 3:
         if st.button("🚀 1次專業模擬 + 真實動畫", type="primary"):
-            # 先計算結果
-            valid_horses = active_horses.dropna(subset=['檔位', '評分', '負磅', '騎師質量', '近況', '穩定', '實力'])
+            st.subheader("🏁 比賽即將開始！")
             
-            # 顯示真實賽馬動畫
-            st.subheader("🏁 比賽即將開始...")
-            
-            # 動畫 HTML
-            animation_html = f"""
-            <div style="background: #1a472a; padding: 20px; border-radius: 15px; color: white; text-align: center;">
-                <h2>🏁 {st.session_state['venue']} {st.session_state['distance']}米 賽事</h2>
-                <div style="background: #2d5a3d; padding: 10px; margin: 15px 0; border-radius: 10px;">
-                    <div style="display: flex; justify-content: space-around; font-size: 18px; margin-bottom: 10px;">
+            # 真實賽馬動畫
+            race_html = """
+            <div style="background: #0a3d0a; padding: 20px; border-radius: 15px; color: white; text-align: center; font-family: Arial;">
+                <h2 style="margin: 10px 0;">🏁 真實賽馬動畫</h2>
+                
+                <div style="background: #1a5f1a; padding: 15px; border-radius: 10px; margin: 15px 0;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
                         <div>出閘！</div>
                         <div>轉彎相爭！</div>
                         <div>最後衝刺！</div>
                     </div>
-                    <div style="height: 8px; background: linear-gradient(to right, #ffcc00, #ff6600); border-radius: 4px; margin: 10px 0;"></div>
-                    <p style="margin: 0; font-size: 14px;">真實賽馬動畫進行中...</p>
+                    
+                    <!-- 動畫賽道 -->
+                    <div style="position: relative; height: 120px; background: #2d7a2d; border-radius: 8px; overflow: hidden; border: 3px solid #ffd700;">
+                        
+                        <!-- 賽道線 -->
+                        <div style="position: absolute; top: 30px; left: 0; right: 0; height: 2px; background: repeating-linear-gradient(90deg, white, white 20px, transparent 20px, transparent 40px);"></div>
+                        <div style="position: absolute; top: 60px; left: 0; right: 0; height: 2px; background: repeating-linear-gradient(90deg, white, white 20px, transparent 20px, transparent 40px);"></div>
+                        <div style="position: absolute; top: 90px; left: 0; right: 0; height: 2px; background: repeating-linear-gradient(90deg, white, white 20px, transparent 20px, transparent 40px);"></div>
+                        
+                        <!-- 馬匹動畫 -->
+                        <div style="position: absolute; top: 15px; left: 10px; font-size: 28px; animation: horse1 4s linear forwards;">🏇</div>
+                        <div style="position: absolute; top: 45px; left: 10px; font-size: 28px; animation: horse2 3.8s linear forwards;">🏇</div>
+                        <div style="position: absolute; top: 75px; left: 10px; font-size: 28px; animation: horse3 4.2s linear forwards;">🏇</div>
+                        
+                        <!-- 終點線 -->
+                        <div style="position: absolute; top: 0; right: 30px; width: 4px; height: 100%; background: #ffd700; box-shadow: 0 0 10px #ffd700;"></div>
+                    </div>
+                    
+                    <style>
+                        @keyframes horse1 {
+                            0% { left: 10px; }
+                            100% { left: 85%; }
+                        }
+                        @keyframes horse2 {
+                            0% { left: 10px; }
+                            100% { left: 88%; }
+                        }
+                        @keyframes horse3 {
+                            0% { left: 10px; }
+                            100% { left: 82%; }
+                        }
+                    </style>
+                    
+                    <p style="margin-top: 15px; font-size: 18px;">🏇 馬匹全力奔馳中...</p>
                 </div>
-                <p style="font-size: 20px; margin: 20px 0;">🏇 馬匹正在全力奔馳！</p>
-                <div style="font-size: 40px; margin: 20px 0;">🏁</div>
             </div>
             """
-            components.html(animation_html, height=280)
+            components.html(race_html, height=320)
             
             # 顯示模擬結果
-            st.success("✅ 比賽完成！以下係模擬結果：")
-            
-            # 簡單模擬結果
+            st.success("✅ 比賽完成！")
             st.subheader("📈 模擬結果（Top 5）")
-            result_df = valid_horses[['馬號','檔位','負磅','評分','實力']].head(5)
-            st.dataframe(result_df, use_container_width=True, hide_index=True)
+            st.dataframe(active_horses[['馬號','檔位','負磅','評分','實力']].head(5), use_container_width=True, hide_index=True)
             
     else:
         st.warning("⚠️ 至少需要 3 匹出賽馬先可以模擬！")
 
 st.divider()
-st.caption("💡 專業動畫版：真實賽馬體驗！")
+st.caption("💡 真實動畫版：出閘 + 轉彎 + 衝刺！")
