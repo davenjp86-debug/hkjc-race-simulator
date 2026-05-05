@@ -1,12 +1,13 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import plotly.express as px
 import streamlit.components.v1 as components
 
 st.set_page_config(page_title="HKJC Race Simulator Pro", page_icon="🏇", layout="wide")
 
-st.title("🏇 HKJC Race Simulator Pro（進階真實動畫版）")
-st.caption("出閘 + 轉彎相爭 + 不同跑法衝刺 + 天氣效果")
+st.title("🏇 HKJC Race Simulator Pro（專業真實版）")
+st.caption("真實模擬 + 智能動畫")
 
 # ==================== 賽事資訊 ====================
 st.subheader("📝 賽事資訊")
@@ -105,69 +106,77 @@ if st.session_state.get('generated', False):
         if st.button("🚀 1次專業模擬 + 真實動畫", type="primary"):
             st.subheader("🏁 真實賽馬動畫")
             
-            # 進階真實動畫
+            # 真實動畫
             race_html = f"""
             <div style="background: #0a3d0a; padding: 15px; border-radius: 15px; color: white; text-align: center;">
                 <h3>🏁 {st.session_state['venue']} {st.session_state['distance']}米 賽事</h3>
                 <p style="margin: 5px 0; font-size: 14px;">天氣：{st.session_state['weather']} | 場地：{st.session_state['track']}</p>
                 
-                <div style="background: #1a5f1a; padding: 12px; border-radius: 10px; margin: 12px 0; position: relative; height: 160px; overflow: hidden;">
-                    
-                    <!-- 賽道 -->
-                    <div style="position: absolute; top: 20px; left: 0; right: 0; height: 120px; background: linear-gradient(#2d7a2d, #1a5f1a); border: 2px solid #ffd700;">
-                        
-                        <!-- 轉彎標示 -->
-                        <div style="position: absolute; top: 40px; left: 30%; width: 40%; height: 40px; border: 2px dashed #ffd700; border-radius: 50%; opacity: 0.6;"></div>
-                        
+                <div style="background: #1a5f1a; padding: 12px; border-radius: 10px; margin: 12px 0; position: relative; height: 140px; overflow: hidden;">
+                    <div style="position: absolute; top: 20px; left: 0; right: 0; height: 100px; background: #2d7a2d; border: 2px solid #ffd700;">
                         <!-- 馬匹動畫 -->
-                        <div style="position: absolute; top: 25px; left: 5%; font-size: 22px; animation: race1 5s ease-in-out forwards;">🏇</div>
-                        <div style="position: absolute; top: 55px; left: 5%; font-size: 22px; animation: race2 4.7s ease-in-out forwards;">🏇</div>
-                        <div style="position: absolute; top: 85px; left: 5%; font-size: 22px; animation: race3 5.3s ease-in-out forwards;">🏇</div>
+                        <div style="position: absolute; top: 15px; left: 8%; font-size: 20px; animation: run1 4.5s ease-in-out forwards;">🏇</div>
+                        <div style="position: absolute; top: 42px; left: 8%; font-size: 20px; animation: run2 4.2s ease-in-out forwards;">🏇</div>
+                        <div style="position: absolute; top: 68px; left: 8%; font-size: 20px; animation: run3 4.8s ease-in-out forwards;">🏇</div>
                         
                         <!-- 衝刺區 -->
-                        <div style="position: absolute; top: 0; right: 15%; width: 25%; height: 100%; background: rgba(255,215,0,0.2); border-left: 3px solid #ffd700;"></div>
+                        <div style="position: absolute; top: 0; right: 18%; width: 22%; height: 100%; background: rgba(255,215,0,0.25);"></div>
                         
                         <!-- 終點線 -->
-                        <div style="position: absolute; top: 0; right: 12%; width: 4px; height: 100%; background: #ffd700; box-shadow: 0 0 15px #ffd700; z-index: 10;"></div>
+                        <div style="position: absolute; top: 0; right: 15%; width: 3px; height: 100%; background: #ffd700;"></div>
                     </div>
                     
-                    <div style="margin-top: 10px; font-size: 13px; opacity: 0.9;">
-                        出閘 → 轉彎相爭 → 最後衝刺
-                    </div>
+                    <style>
+                        @keyframes run1 {{ 0% {{ left: 8%; }} 100% {{ left: 78%; }} }}
+                        @keyframes run2 {{ 0% {{ left: 8%; }} 100% {{ left: 82%; }} }}
+                        @keyframes run3 {{ 0% {{ left: 8%; }} 100% {{ left: 75%; }} }}
+                    </style>
+                    
+                    <p style="margin-top: 8px; font-size: 14px;">🏇 馬匹全力競逐中...</p>
                 </div>
-                
-                <style>
-                    @keyframes race1 {{
-                        0% {{ left: 5%; }}
-                        40% {{ left: 45%; }}
-                        70% {{ left: 72%; }}
-                        100% {{ left: 82%; }}
-                    }}
-                    @keyframes race2 {{
-                        0% {{ left: 5%; }}
-                        35% {{ left: 48%; }}
-                        65% {{ left: 75%; }}
-                        100% {{ left: 85%; }}
-                    }}
-                    @keyframes race3 {{
-                        0% {{ left: 5%; }}
-                        45% {{ left: 42%; }}
-                        75% {{ left: 70%; }}
-                        100% {{ left: 78%; }}
-                    }}
-                </style>
-                
-                <p style="margin: 8px 0; font-size: 15px;">🏇 馬匹根據跑法全力競逐中...</p>
             </div>
             """
-            components.html(race_html, height=340)
+            components.html(race_html, height=260)
             
-            st.success("✅ 比賽完成！")
-            st.subheader("📈 模擬結果（Top 5）")
-            st.dataframe(active_horses[['馬號','檔位','負磅','評分','實力']].head(5), use_container_width=True, hide_index=True)
+            # 真正計算模擬結果
+            valid_horses = active_horses.dropna(subset=['檔位', '評分', '負磅', '騎師質量', '近況', '穩定', '實力'])
+            
+            # 計算實力分（真正使用馬匹數據）
+            valid_horses = valid_horses.copy()
+            valid_horses['實力分'] = (
+                valid_horses['實力'] * 0.30 +
+                valid_horses['評分']/valid_horses['評分'].max()*22 + 
+                (15 - (valid_horses['檔位']-1)*0.4) +
+                (valid_horses['負磅'] - 120) * -0.06 +
+                valid_horses['騎師質量'] * 1.5 +
+                valid_horses['近況'] * 1.2 +
+                valid_horses['穩定'] * 0.9 +
+                valid_horses['跑法'].apply(lambda x: len(str(x).split(", ")) * 0.8 if pd.notna(x) and str(x) else 0)
+            ).round(1)
+            
+            # Monte Carlo 模擬
+            results = []
+            for _ in range(5000):
+                times = {row['馬號']: 70 - (row['實力分']-50)*0.08 + (row['檔位']-1)*0.08 + np.random.normal(0, 1.2) 
+                         for _, row in valid_horses.iterrows()}
+                winner = min(times, key=times.get)
+                results.append(winner)
+            
+            win = pd.Series(results).value_counts().reset_index()
+            win.columns = ['馬號','勝出次數']
+            win['勝率%'] = (win['勝出次數']/5000*100).round(1)
+            win = win.merge(valid_horses[['馬號','檔位','負磅','評分','實力','跑法']], on='馬號').sort_values('勝率%', ascending=False)
+            
+            st.subheader("📈 真實模擬結果（Top 5）")
+            st.dataframe(win.head(5)[['馬號','檔位','負磅','評分','實力','跑法','勝率%']], use_container_width=True, hide_index=True)
+            
+            fig = px.bar(win.head(10), x='馬號', y='勝率%', title="真實模擬勝出率（已考慮所有因素）")
+            st.plotly_chart(fig, use_container_width=True)
+            
+            st.success("✅ 模擬完成！結果已根據馬匹實力、跑法、檔位、負磅等真正計算。")
             
     else:
         st.warning("⚠️ 至少需要 3 匹出賽馬先可以模擬！")
 
 st.divider()
-st.caption("💡 進階動畫版：出閘 + 轉彎 + 衝刺 + 天氣效果！")
+st.caption("💡 專業版：真實模擬 + 動畫！")
