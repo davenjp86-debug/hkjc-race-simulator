@@ -20,22 +20,19 @@ with col1:
         track = st.selectbox("場地", ["草地", "全天候"])
     else:
         track = "草地"
-        st.info("跑馬地默認草地")
     
     race_class = st.selectbox("班級", ["一級賽", "二級賽", "三級賽", "一班", "二班", "三班", "四班", "五班"])
 
 with col2:
-    # 距離選項（根據馬場+場地）
     if venue == "沙田" and track == "草地":
         distance_options = [1000, 1200, 1400, 1600, 1800, 2000, 2400]
     elif venue == "沙田" and track == "全天候":
         distance_options = [1200, 1650, 1800, 2000, 2400]
-    else:  # 跑馬地
+    else:
         distance_options = [1000, 1200, 1650, 1800, 2200]
     
     distance = st.selectbox("距離（米）", distance_options)
     
-    # 欄位（只有草地有）
     if track == "草地":
         if venue == "沙田":
             rail_options = ["A", "A+2", "A+3", "B", "B+2", "C", "C+3"]
@@ -44,13 +41,14 @@ with col2:
         rail = st.selectbox("欄位", rail_options)
     else:
         rail = "無"
-        st.info("全天候無欄位選擇")
     
     weather = st.selectbox("天氣", ["晴天", "陰天", "小雨", "大雨"])
-    
     hour = st.slider("時間（小時）", 0, 23, 14)
     minute = st.slider("時間（分鐘）", 0, 59, 30)
     race_time = f"{hour:02d}:{minute:02d}"
+
+# 新增：出賽馬匹數量
+num_horses = st.slider("出賽馬匹數量（4\~40匹）", min_value=4, max_value=40, value=14, step=1)
 
 if st.button("🚀 生成賽事", type="primary"):
     st.session_state['venue'] = venue
@@ -60,11 +58,11 @@ if st.button("🚀 生成賽事", type="primary"):
     st.session_state['rail'] = rail
     st.session_state['weather'] = weather
     st.session_state['race_time'] = race_time
+    st.session_state['num_horses'] = num_horses
     st.session_state['generated'] = True
     
-    # 初始化馬匹資料
     data = []
-    for i in range(1, 15):
+    for i in range(1, num_horses + 1):
         data.append({
             "馬號": i,
             "狀態": "出賽",
@@ -80,10 +78,9 @@ if st.button("🚀 生成賽事", type="primary"):
     st.session_state['df'] = pd.DataFrame(data)
 
 if st.session_state.get('generated', False):
-    st.success(f"✅ 賽事已設定：{st.session_state['venue']} {st.session_state['distance']}米 {st.session_state['race_class']}")
+    st.success(f"✅ 賽事已設定：{st.session_state['venue']} {st.session_state['distance']}米 {st.session_state['race_class']}（{st.session_state['num_horses']}匹馬）")
     
     df = st.session_state['df']
-    st.subheader("📋 馬匹資料")
     st.dataframe(df, use_container_width=True, hide_index=True)
     
     st.divider()
@@ -134,54 +131,68 @@ if st.session_state.get('generated', False):
     active_horses = df[df["狀態"] == "出賽"].copy()
     
     if len(active_horses) >= 3:
-        if st.button("🚀 開始 5000 次專業模擬", type="primary"):
-            valid_horses = active_horses.dropna(subset=['檔位', '評分', '負磅', '騎師質量', '近況', '穩定', '實力'])
-            
-            if len(valid_horses) < 3:
-                st.error("⚠️ 至少需要 3 匹馬填寫完整資料先可以模擬！")
-            else:
-                # 智能模擬（考慮所有因素）
-                base_time = 70 + (st.session_state['distance'] - 1600) * 0.008
-                
-                # 天氣影響
-                weather_factor = {"晴天": 0, "陰天": 0.3, "小雨": 0.8, "大雨": 1.5}[st.session_state['weather']]
-                
-                # 場地影響
-                track_factor = 0.5 if st.session_state['track'] == "全天候" else 0
-                
-                valid_horses['實力分'] = (
-                    valid_horses['實力'] * 0.28 +
-                    valid_horses['評分']/valid_horses['評分'].max()*18 + 
-                    (15 - (valid_horses['檔位']-1)*0.35) +
-                    (valid_horses['負磅'] - 120) * -0.05 +
-                    valid_horses['騎師質量'] * 1.4 +
-                    valid_horses['近況'] * 1.1 +
-                    valid_horses['穩定'] * 0.8 +
-                    valid_horses['跑法'].apply(lambda x: len(str(x).split(", ")) * 0.7 if pd.notna(x) and str(x) else 0)
-                ).round(1)
-                
-                results = []
-                for _ in range(5000):
-                    times = {row['馬號']: base_time - (row['實力分']-50)*0.07 + (row['檔位']-1)*0.07 + np.random.normal(0, 1.0 + weather_factor + track_factor) 
-                             for _, row in valid_horses.iterrows()}
-                    winner = min(times, key=times.get)
-                    results.append(winner)
-                
-                win = pd.Series(results).value_counts().reset_index()
-                win.columns = ['馬號','勝出次數']
-                win['勝率%'] = (win['勝出次數']/5000*100).round(1)
-                win = win.merge(valid_horses[['馬號','檔位','負磅','評分','實力','跑法']], on='馬號').sort_values('勝率%', ascending=False)
-                
-                st.subheader("📈 模擬結果（Top 5）")
-                st.dataframe(win.head(5)[['馬號','檔位','負磅','評分','實力','跑法','勝率%']], use_container_width=True, hide_index=True)
-                
-                fig = px.bar(win.head(10), x='馬號', y='勝率%', title="模擬勝出率")
-                st.plotly_chart(fig, use_container_width=True)
-                
-                st.success("✅ 模擬完成！（已考慮馬場、場地、距離、班級、天氣、時間等因素）")
+        col_sim1, col_sim2 = st.columns(2)
+        
+        with col_sim1:
+            if st.button("🚀 1次專業模擬", type="primary"):
+                run_simulation(active_horses, 1, st.session_state)
+        
+        with col_sim2:
+            if st.button("🚀 10次專業模擬", type="primary"):
+                run_simulation(active_horses, 10, st.session_state)
     else:
         st.warning("⚠️ 至少需要 3 匹出賽馬先可以模擬！")
 
 st.divider()
 
 st.caption("💡 專業版：所有設定都會影響模擬結果！")
+
+# ==================== 模擬函數 ====================
+def run_simulation(active_horses, num_runs, session_state):
+    valid_horses = active_horses.dropna(subset=['檔位', '評分', '負磅', '騎師質量', '近況', '穩定', '實力'])
+    
+    if len(valid_horses) < 3:
+        st.error("⚠️ 至少需要 3 匹馬填寫完整資料先可以模擬！")
+        return
+    
+    base_time = 70 + (session_state['distance'] - 1600) * 0.008
+    weather_factor = {"晴天": 0, "陰天": 0.3, "小雨": 0.8, "大雨": 1.5}[session_state['weather']]
+    track_factor = 0.5 if session_state['track'] == "全天候" else 0
+    
+    valid_horses['實力分'] = (
+        valid_horses['實力'] * 0.28 +
+        valid_horses['評分']/valid_horses['評分'].max()*18 + 
+        (15 - (valid_horses['檔位']-1)*0.35) +
+        (valid_horses['負磅'] - 120) * -0.05 +
+        valid_horses['騎師質量'] * 1.4 +
+        valid_horses['近況'] * 1.1 +
+        valid_horses['穩定'] * 0.8 +
+        valid_horses['跑法'].apply(lambda x: len(str(x).split(", ")) * 0.7 if pd.notna(x) and str(x) else 0)
+    ).round(1)
+    
+    all_results = []
+    for _ in range(num_runs):
+        results = []
+        for _ in range(5000):
+            times = {row['馬號']: base_time - (row['實力分']-50)*0.07 + (row['檔位']-1)*0.07 + np.random.normal(0, 1.0 + weather_factor + track_factor) 
+                     for _, row in valid_horses.iterrows()}
+            winner = min(times, key=times.get)
+            results.append(winner)
+        
+        win = pd.Series(results).value_counts().reset_index()
+        win.columns = ['馬號','勝出次數']
+        win['勝率%'] = (win['勝出次數']/5000*100).round(1)
+        win = win.merge(valid_horses[['馬號','檔位','負磅','評分','實力','跑法']], on='馬號').sort_values('勝率%', ascending=False)
+        all_results.append(win)
+    
+    # 平均結果
+    avg_win = pd.concat(all_results).groupby('馬號').mean().reset_index()
+    avg_win = avg_win.merge(valid_horses[['馬號','檔位','負磅','評分','實力','跑法']], on='馬號').sort_values('勝率%', ascending=False)
+    
+    st.subheader(f"📈 {num_runs}次模擬平均結果（Top 5）")
+    st.dataframe(avg_win.head(5)[['馬號','檔位','負磅','評分','實力','跑法','勝率%']], use_container_width=True, hide_index=True)
+    
+    fig = px.bar(avg_win.head(10), x='馬號', y='勝率%', title=f"{num_runs}次模擬平均勝出率")
+    st.plotly_chart(fig, use_container_width=True)
+    
+    st.success(f"✅ {num_runs}次專業模擬完成！")
