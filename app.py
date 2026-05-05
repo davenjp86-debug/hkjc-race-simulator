@@ -1,13 +1,12 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import plotly.express as px
 import streamlit.components.v1 as components
 
 st.set_page_config(page_title="HKJC Race Simulator Pro", page_icon="🏇", layout="wide")
 
-st.title("🏇 HKJC Race Simulator Pro（真實動畫版）")
-st.caption("出閘 + 位置爭奪 + 轉彎 + 衝刺動畫")
+st.title("🏇 HKJC Race Simulator Pro（進階真實動畫版）")
+st.caption("出閘 + 轉彎相爭 + 不同跑法衝刺 + 天氣效果")
 
 # ==================== 賽事資訊 ====================
 st.subheader("📝 賽事資訊")
@@ -104,59 +103,65 @@ if st.session_state.get('generated', False):
     
     if len(active_horses) >= 3:
         if st.button("🚀 1次專業模擬 + 真實動畫", type="primary"):
-            st.subheader("🏁 比賽即將開始！")
+            st.subheader("🏁 真實賽馬動畫")
             
-            # 真實賽馬動畫
-            race_html = """
-            <div style="background: #0a3d0a; padding: 20px; border-radius: 15px; color: white; text-align: center; font-family: Arial;">
-                <h2 style="margin: 10px 0;">🏁 真實賽馬動畫</h2>
+            # 進階真實動畫
+            race_html = f"""
+            <div style="background: #0a3d0a; padding: 15px; border-radius: 15px; color: white; text-align: center;">
+                <h3>🏁 {st.session_state['venue']} {st.session_state['distance']}米 賽事</h3>
+                <p style="margin: 5px 0; font-size: 14px;">天氣：{st.session_state['weather']} | 場地：{st.session_state['track']}</p>
                 
-                <div style="background: #1a5f1a; padding: 15px; border-radius: 10px; margin: 15px 0;">
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
-                        <div>出閘！</div>
-                        <div>轉彎相爭！</div>
-                        <div>最後衝刺！</div>
-                    </div>
+                <div style="background: #1a5f1a; padding: 12px; border-radius: 10px; margin: 12px 0; position: relative; height: 160px; overflow: hidden;">
                     
-                    <!-- 動畫賽道 -->
-                    <div style="position: relative; height: 120px; background: #2d7a2d; border-radius: 8px; overflow: hidden; border: 3px solid #ffd700;">
+                    <!-- 賽道 -->
+                    <div style="position: absolute; top: 20px; left: 0; right: 0; height: 120px; background: linear-gradient(#2d7a2d, #1a5f1a); border: 2px solid #ffd700;">
                         
-                        <!-- 賽道線 -->
-                        <div style="position: absolute; top: 30px; left: 0; right: 0; height: 2px; background: repeating-linear-gradient(90deg, white, white 20px, transparent 20px, transparent 40px);"></div>
-                        <div style="position: absolute; top: 60px; left: 0; right: 0; height: 2px; background: repeating-linear-gradient(90deg, white, white 20px, transparent 20px, transparent 40px);"></div>
-                        <div style="position: absolute; top: 90px; left: 0; right: 0; height: 2px; background: repeating-linear-gradient(90deg, white, white 20px, transparent 20px, transparent 40px);"></div>
+                        <!-- 轉彎標示 -->
+                        <div style="position: absolute; top: 40px; left: 30%; width: 40%; height: 40px; border: 2px dashed #ffd700; border-radius: 50%; opacity: 0.6;"></div>
                         
                         <!-- 馬匹動畫 -->
-                        <div style="position: absolute; top: 15px; left: 10px; font-size: 28px; animation: horse1 4s linear forwards;">🏇</div>
-                        <div style="position: absolute; top: 45px; left: 10px; font-size: 28px; animation: horse2 3.8s linear forwards;">🏇</div>
-                        <div style="position: absolute; top: 75px; left: 10px; font-size: 28px; animation: horse3 4.2s linear forwards;">🏇</div>
+                        <div style="position: absolute; top: 25px; left: 5%; font-size: 22px; animation: race1 5s ease-in-out forwards;">🏇</div>
+                        <div style="position: absolute; top: 55px; left: 5%; font-size: 22px; animation: race2 4.7s ease-in-out forwards;">🏇</div>
+                        <div style="position: absolute; top: 85px; left: 5%; font-size: 22px; animation: race3 5.3s ease-in-out forwards;">🏇</div>
+                        
+                        <!-- 衝刺區 -->
+                        <div style="position: absolute; top: 0; right: 15%; width: 25%; height: 100%; background: rgba(255,215,0,0.2); border-left: 3px solid #ffd700;"></div>
                         
                         <!-- 終點線 -->
-                        <div style="position: absolute; top: 0; right: 30px; width: 4px; height: 100%; background: #ffd700; box-shadow: 0 0 10px #ffd700;"></div>
+                        <div style="position: absolute; top: 0; right: 12%; width: 4px; height: 100%; background: #ffd700; box-shadow: 0 0 15px #ffd700; z-index: 10;"></div>
                     </div>
                     
-                    <style>
-                        @keyframes horse1 {
-                            0% { left: 10px; }
-                            100% { left: 85%; }
-                        }
-                        @keyframes horse2 {
-                            0% { left: 10px; }
-                            100% { left: 88%; }
-                        }
-                        @keyframes horse3 {
-                            0% { left: 10px; }
-                            100% { left: 82%; }
-                        }
-                    </style>
-                    
-                    <p style="margin-top: 15px; font-size: 18px;">🏇 馬匹全力奔馳中...</p>
+                    <div style="margin-top: 10px; font-size: 13px; opacity: 0.9;">
+                        出閘 → 轉彎相爭 → 最後衝刺
+                    </div>
                 </div>
+                
+                <style>
+                    @keyframes race1 {{
+                        0% {{ left: 5%; }}
+                        40% {{ left: 45%; }}
+                        70% {{ left: 72%; }}
+                        100% {{ left: 82%; }}
+                    }}
+                    @keyframes race2 {{
+                        0% {{ left: 5%; }}
+                        35% {{ left: 48%; }}
+                        65% {{ left: 75%; }}
+                        100% {{ left: 85%; }}
+                    }}
+                    @keyframes race3 {{
+                        0% {{ left: 5%; }}
+                        45% {{ left: 42%; }}
+                        75% {{ left: 70%; }}
+                        100% {{ left: 78%; }}
+                    }}
+                </style>
+                
+                <p style="margin: 8px 0; font-size: 15px;">🏇 馬匹根據跑法全力競逐中...</p>
             </div>
             """
-            components.html(race_html, height=320)
+            components.html(race_html, height=340)
             
-            # 顯示模擬結果
             st.success("✅ 比賽完成！")
             st.subheader("📈 模擬結果（Top 5）")
             st.dataframe(active_horses[['馬號','檔位','負磅','評分','實力']].head(5), use_container_width=True, hide_index=True)
@@ -165,4 +170,4 @@ if st.session_state.get('generated', False):
         st.warning("⚠️ 至少需要 3 匹出賽馬先可以模擬！")
 
 st.divider()
-st.caption("💡 真實動畫版：出閘 + 轉彎 + 衝刺！")
+st.caption("💡 進階動畫版：出閘 + 轉彎 + 衝刺 + 天氣效果！")
