@@ -146,3 +146,47 @@ if st.session_state.get('generated', False):
 
 st.divider()
 st.caption("💡 純模擬版：穩定 + 真實結果！")
+st.divider()
+st.subheader("🧠 GNN 圖神經網絡預測（進階功能）")
+
+st.info("""
+**GNN 在賽馬預測嘅優勢：**
+- 可以捕捉馬匹之間嘅相互影響（例如：一匹馬領放會影響其他馬嘅配速）
+- 考慮轉彎時內欄優勢
+- 學習複雜嘅賽事動態關係
+""")
+
+if st.button("🚀 使用 GNN 進行預測", type="secondary"):
+    valid_horses = st.session_state['df'][st.session_state['df']["狀態"] == "出賽"].dropna(subset=['檔位', '評分', '負磅', '騎師質量', '近況', '穩定', '實力'])
+    
+    if len(valid_horses) < 3:
+        st.error("⚠️ 至少需要 3 匹馬填寫完整資料先可以預測！")
+    else:
+        # 模擬 GNN 輸出（實際應用需要訓練模型）
+        st.subheader("📈 GNN 預測結果（Top 5）")
+        
+        # 簡單模擬 GNN 分數（實際應用會更複雜）
+        gnn_score = (
+            valid_horses['實力'] * 0.25 +
+            valid_horses['評分']/valid_horses['評分'].max()*20 + 
+            valid_horses['騎師質量'] * 1.8 +
+            valid_horses['近況'] * 1.5 +
+            valid_horses['穩定'] * 1.2 +
+            (15 - (valid_horses['檔位']-1)*0.3) * 0.8
+        ).round(2)
+        
+        gnn_result = valid_horses[['馬號','檔位','負磅','評分','實力','跑法']].copy()
+        gnn_result['GNN 分數'] = gnn_score
+        gnn_result = gnn_result.sort_values('GNN 分數', ascending=False)
+        
+        st.dataframe(gnn_result.head(5)[['馬號','檔位','負磅','評分','實力','跑法','GNN 分數']], use_container_width=True, hide_index=True)
+        
+        st.success("✅ GNN 預測完成！（實際應用需要大量歷史賽事數據訓練模型）")
+        
+        st.info("""
+        **注意：**  
+        呢個係 GNN 嘅概念展示。真正嘅 GNN 需要：
+        - 大量歷史賽事數據
+        - PyTorch Geometric 或 DGL 框架
+        - 訓練圖神經網絡模型
+        """)
