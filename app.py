@@ -6,7 +6,7 @@ import plotly.express as px
 st.set_page_config(page_title="HKJC Race Simulator Pro", page_icon="🏇", layout="wide")
 
 st.title("🏇 HKJC Race Simulator Pro（最終專業版）")
-st.caption("GNN + 全因素模擬 + 批量貼上資料（自動修正範圍）")
+st.caption("GNN + 全因素模擬 + 批量貼上資料（支援多跑法）")
 
 # ==================== 賽事資訊 ====================
 st.subheader("📝 賽事資訊")
@@ -65,9 +65,9 @@ if st.session_state.get('generated', False):
     st.divider()
     st.subheader("📋 批量貼上馬匹資料（從記事本複製）")
     
-    st.info("請將你記事本嘅馬匹資料完整複製後貼上，系統會自動解析同修正超出範圍嘅數值。")
+    st.info("請將你記事本嘅馬匹資料完整複製後貼上，系統會自動解析多跑法（例如 123456789）。")
     
-    batch_input = st.text_area("貼上馬匹資料", height=200, placeholder="例如：\n出賽，1, 123, 10, 55, 2, 3, 12\n出賽，2, 124, 3, 12, 2, 3, 234")
+    batch_input = st.text_area("貼上馬匹資料", height=200, placeholder="例如：\n出賽,14,139,6,44,5,1,123456789")
     
     if st.button("🚀 套用批量資料", type="primary"):
         if batch_input.strip() == "":
@@ -91,13 +91,20 @@ if st.session_state.get('generated', False):
                         recent = max(1, min(10, int(parts[6])))
                         stable = max(1, min(10, int(parts[7])))
                         
-                        run_code = parts[8] if len(parts) > 8 else ""
+                        # ==================== 跑法解析（支援多個） ====================
+                        run_codes = parts[8] if len(parts) > 8 else ""
                         run_map = {
                             "1": "🏹 大逃", "2": "🏹 逃放", "3": "🏹 前置",
                             "4": "🏹 先行", "5": "🏹 居中", "6": "🏹 中後",
                             "7": "🏹 留後", "8": "🏹 後上", "9": "🏹 後追"
                         }
-                        run_style = run_map.get(run_code, "")
+                        
+                        run_styles = []
+                        for code in run_codes:
+                            if code in run_map:
+                                run_styles.append(run_map[code])
+                        
+                        run_style = ", ".join(run_styles) if run_styles else ""
                         
                         new_data.append({
                             "馬號": horse_num,
@@ -113,7 +120,7 @@ if st.session_state.get('generated', False):
                 
                 if new_data:
                     st.session_state['df'] = pd.DataFrame(new_data)
-                    st.success(f"✅ 已成功套用 {len(new_data)} 匹馬嘅資料！（已自動修正超出範圍嘅數值）")
+                    st.success(f"✅ 已成功套用 {len(new_data)} 匹馬嘅資料！")
                     st.rerun()
                 else:
                     st.error("⚠️ 未能解析到有效資料，請檢查格式！")
@@ -289,4 +296,4 @@ if st.session_state.get('generated', False):
         st.warning("⚠️ 至少需要 3 匹出賽馬先可以模擬！")
 
 st.divider()
-st.caption("💡 最終專業版：全因素模擬 + 批量貼上資料（自動修正範圍）")
+st.caption("💡 最終專業版：全因素模擬 + 批量貼上資料（支援多跑法）")
