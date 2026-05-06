@@ -7,7 +7,7 @@ from collections import Counter
 st.set_page_config(page_title="HKJC Race Simulator Pro", page_icon="🏇", layout="wide")
 
 st.title("🏇 HKJC Race Simulator Pro（最終專業版）")
-st.caption("GNN + Pace Model + 全因素模擬 + 詳細投注統計")
+st.caption("GNN + Pace Model + 全因素模擬 + 詳細投注統計（已降低騎師比重 + 增加隨機性）")
 
 # ==================== 賽事資訊 ====================
 st.subheader("📝 賽事資訊")
@@ -186,7 +186,7 @@ if st.session_state.get('generated', False):
                     valid_horses['實力'] * 0.25 +
                     (15 - (valid_horses['檔位']-1)*0.3) +
                     (valid_horses['負磅'] - 120) * -0.04 +
-                    valid_horses['騎師質量'] * 1.6 +
+                    valid_horses['騎師質量'] * 1.3 +   # 已降低
                     valid_horses['近況'] * 1.0 +
                     valid_horses['穩定'] * 0.75
                 )
@@ -249,16 +249,17 @@ if st.session_state.get('generated', False):
                         if "大逃" in str(row['跑法']): score -= 1.0
                         score += (row['穩定'] - 50) * 0.02
                     
-                    score += jockey * 1.8
+                    # 騎師影響（已降低比重）
+                    score += jockey * 1.3
                     if race_class in ["一級賽", "二級賽", "三級賽"]:
-                        if jockey >= 8: score += 2.5
-                        if jockey <= 4: score -= 1.5
-                    if weather in ["小雨", "大雨"]:
-                        if jockey >= 7: score += 2.0
-                        if jockey <= 4: score -= 1.2
-                    if distance >= 1800:
-                        if jockey >= 7: score += 1.8
+                        if jockey >= 8: score += 1.5
                         if jockey <= 4: score -= 1.0
+                    if weather in ["小雨", "大雨"]:
+                        if jockey >= 7: score += 1.2
+                        if jockey <= 4: score -= 0.8
+                    if distance >= 1800:
+                        if jockey >= 7: score += 1.2
+                        if jockey <= 4: score -= 0.7
                     
                     if venue == "跑馬地":
                         if row['檔位'] <= 4: score += 3.2
@@ -274,19 +275,19 @@ if st.session_state.get('generated', False):
                 
                 # ==================== 10次模擬 + 詳細統計 ====================
                 all_results = []
-                all_full_results = []  # 用於統計連贏、三重彩等
+                all_full_results = []
                 
                 for _ in range(10):
                     results = []
                     full_results = []
                     for _ in range(5000):
-                        times = {row['馬號']: 70 - (row['實力分']-50)*0.08 + (row['檔位']-1)*0.08 + np.random.normal(0, 1.2) 
+                        times = {row['馬號']: 70 - (row['實力分']-50)*0.08 + (row['檔位']-1)*0.08 + np.random.normal(0, 1.8)   # 已增加隨機性
                                  for _, row in valid_horses.iterrows()}
                         sorted_horses = sorted(times.items(), key=lambda x: x[1])
                         
                         top4 = [h[0] for h in sorted_horses[:4]]
-                        results.append(top4[0])  # 獨贏
-                        full_results.append(tuple(top4))  # 完整前4名
+                        results.append(top4[0])
+                        full_results.append(tuple(top4))
                     
                     all_results.extend(results)
                     all_full_results.extend(full_results)
@@ -296,57 +297,40 @@ if st.session_state.get('generated', False):
                 quinella_count = Counter()
                 trio_count = Counter()
                 tierce_count = Counter()
-                quartet_count = Counter()
                 first4_count = Counter()
+                quartet_count = Counter()
                 
                 for res in all_full_results:
-                    # 連贏
                     quinella_count[tuple(sorted(res[:2]))] += 1
-                    # 位置Q
                     trio_count[tuple(sorted(res[:3]))] += 1
-                    # 單T
                     tierce_count[res[:3]] += 1
-                    # 三重彩
-                    tierce_count[res[:3]] += 1
-                    # 四連環
                     first4_count[tuple(sorted(res))] += 1
-                    # 四重彩
                     quartet_count[res] += 1
                 
                 # 顯示結果
                 st.subheader("📈 10次專業模擬結果")
                 
-                # 最多獨贏
                 most_win = win_count.most_common(1)[0]
                 st.write(f"**最多獨贏**：馬號 {most_win[0]}（{most_win[1]} 場）")
                 
-                # 最多連贏
                 most_quinella = quinella_count.most_common(1)[0]
                 st.write(f"**最多連贏**：馬號 {most_quinella[0][0]} & {most_quinella[0][1]}（{most_quinella[1]} 場）")
                 
-                # 最多位置Q
                 most_trio = trio_count.most_common(1)[0]
                 st.write(f"**最多位置Q**：馬號 {most_trio[0][0]} & {most_trio[0][1]}（{most_trio[1]} 場）")
                 
-                # 最多單T
                 most_tierce = tierce_count.most_common(1)[0]
-                st.write(f"**最多單T**：馬號 {most_tierce[0][0]} → {most_tierce[0][1]} → {most_tierce[0][2]}（{most_tierce[1]} 場）")
+                st.write(f"**最多單T / 三重彩**：馬號 {most_tierce[0][0]} → {most_tierce[0][1]} → {most_tierce[0][2]}（{most_tierce[1]} 場）")
                 
-                # 最多三重彩
-                most_tierce = tierce_count.most_common(1)[0]
-                st.write(f"**最多三重彩**：馬號 {most_tierce[0][0]} → {most_tierce[0][1]} → {most_tierce[0][2]}（{most_tierce[1]} 場）")
-                
-                # 最多四連環
                 most_first4 = first4_count.most_common(1)[0]
                 st.write(f"**最多四連環**：馬號 {most_first4[0][0]} & {most_first4[0][1]} & {most_first4[0][2]} & {most_first4[0][3]}（{most_first4[1]} 場）")
                 
-                # 最多四重彩
                 most_quartet = quartet_count.most_common(1)[0]
                 st.write(f"**最多四重彩**：馬號 {most_quartet[0][0]} → {most_quartet[0][1]} → {most_quartet[0][2]} → {most_quartet[0][3]}（{most_quartet[1]} 場）")
                 
-                st.success("✅ 10次專業模擬完成！已結合 GNN + Pace Model + 全因素")
+                st.success("✅ 10次專業模擬完成！已結合 GNN + Pace Model + 全因素（騎師比重已降低 + 隨機性已增加）")
     else:
         st.warning("⚠️ 至少需要 3 匹出賽馬先可以模擬！")
 
 st.divider()
-st.caption("💡 最終專業版：全因素 + Pace Model + 詳細投注統計")
+st.caption("💡 最終專業版：全因素 + Pace Model + 詳細投注統計（騎師比重降低 + 隨機性增加）")
