@@ -6,7 +6,7 @@ import plotly.express as px
 st.set_page_config(page_title="HKJC Race Simulator Pro", page_icon="🏇", layout="wide")
 
 st.title("🏇 HKJC Race Simulator Pro（最終專業版）")
-st.caption("GNN + 全因素模擬 + 批量貼上資料（支援多跑法）")
+st.caption("GNN + 全因素模擬 + 批量貼上資料（你嘅格式）")
 
 # ==================== 賽事資訊 ====================
 st.subheader("📝 賽事資訊")
@@ -65,9 +65,9 @@ if st.session_state.get('generated', False):
     st.divider()
     st.subheader("📋 批量貼上馬匹資料（從記事本複製）")
     
-    st.info("請將你記事本嘅馬匹資料完整複製後貼上，系統會自動解析多跑法（例如 123456789）。")
+    st.info("格式範例：1. 出賽,7,135,5,40,7,4,5678")
     
-    batch_input = st.text_area("貼上馬匹資料", height=200, placeholder="例如：\n出賽,14,139,6,44,5,1,123456789")
+    batch_input = st.text_area("貼上馬匹資料", height=200, placeholder="例如：\n1. 出賽,7,135,5,40,7,4,5678\n2. 出賽,6,124,3,12,2,3,234")
     
     if st.button("🚀 套用批量資料", type="primary"):
         if batch_input.strip() == "":
@@ -81,9 +81,9 @@ if st.session_state.get('generated', False):
                     parts = [p.strip() for p in line.split(',')]
                     
                     if len(parts) >= 8:
-                        horse_num = int(parts[1])
-                        
-                        # 自動修正超出範圍嘅數值
+                        # 格式：1. 出賽,7,135,5,40,7,4,5678
+                        horse_num = int(parts[0].replace('.', ''))
+                        status = parts[1]
                         draw = max(1, min(40, int(parts[2])))
                         weight = max(100, min(140, int(parts[3])))
                         jockey = max(1, min(10, int(parts[4])))
@@ -91,7 +91,7 @@ if st.session_state.get('generated', False):
                         recent = max(1, min(10, int(parts[6])))
                         stable = max(1, min(10, int(parts[7])))
                         
-                        # ==================== 跑法解析（支援多個） ====================
+                        # 跑法
                         run_codes = parts[8] if len(parts) > 8 else ""
                         run_map = {
                             "1": "🏹 大逃", "2": "🏹 逃放", "3": "🏹 前置",
@@ -108,7 +108,7 @@ if st.session_state.get('generated', False):
                         
                         new_data.append({
                             "馬號": horse_num,
-                            "狀態": parts[0],
+                            "狀態": status,
                             "檔位": draw,
                             "負磅": weight,
                             "騎師質量": jockey,
@@ -296,4 +296,4 @@ if st.session_state.get('generated', False):
         st.warning("⚠️ 至少需要 3 匹出賽馬先可以模擬！")
 
 st.divider()
-st.caption("💡 最終專業版：全因素模擬 + 批量貼上資料（支援多跑法）")
+st.caption("💡 最終專業版：全因素模擬 + 批量貼上資料（你嘅格式）")
