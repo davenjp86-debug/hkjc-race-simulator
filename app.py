@@ -65,9 +65,9 @@ if st.session_state.get('generated', False):
     st.divider()
     st.subheader("📋 批量貼上馬匹資料（從記事本複製）")
     
-    st.info("格式範例：1. 出賽,7,135,5,40,7,4,5678")
+    st.info("格式範例：1.出賽,7,135,5,40,7,4,5678")
     
-    batch_input = st.text_area("貼上馬匹資料", height=200, placeholder="例如：\n1. 出賽,7,135,5,40,7,4,5678\n2. 出賽,6,124,3,12,2,3,234")
+    batch_input = st.text_area("貼上馬匹資料", height=200, placeholder="例如：\n1.出賽,7,135,5,40,7,4,5678\n2.出賽,6,134,10,38,5,4,12")
     
     if st.button("🚀 套用批量資料", type="primary"):
         if batch_input.strip() == "":
@@ -81,18 +81,26 @@ if st.session_state.get('generated', False):
                     parts = [p.strip() for p in line.split(',')]
                     
                     if len(parts) >= 8:
-                        # 格式：1. 出賽,7,135,5,40,7,4,5678
-                        horse_num = int(parts[0].replace('.', ''))
-                        status = parts[1]
-                        draw = max(1, min(40, int(parts[2])))
-                        weight = max(100, min(140, int(parts[3])))
-                        jockey = max(1, min(10, int(parts[4])))
-                        power = max(1, min(100, int(parts[5])))
-                        recent = max(1, min(10, int(parts[6])))
-                        stable = max(1, min(10, int(parts[7])))
+                        # 格式：1.出賽,7,135,5,40,7,4,5678
+                        first_part = parts[0]  # 例如 "1.出賽"
+                        
+                        if '.' in first_part:
+                            horse_num = int(first_part.split('.')[0])
+                            status = first_part.split('.')[1]
+                        else:
+                            horse_num = int(first_part)
+                            status = parts[1]
+                            parts = [status] + parts[1:]
+                        
+                        draw = max(1, min(40, int(parts[1])))
+                        weight = max(100, min(140, int(parts[2])))
+                        jockey = max(1, min(10, int(parts[3])))
+                        power = max(1, min(100, int(parts[4])))
+                        recent = max(1, min(10, int(parts[5])))
+                        stable = max(1, min(10, int(parts[6])))
                         
                         # 跑法
-                        run_codes = parts[8] if len(parts) > 8 else ""
+                        run_codes = parts[7] if len(parts) > 7 else ""
                         run_map = {
                             "1": "🏹 大逃", "2": "🏹 逃放", "3": "🏹 前置",
                             "4": "🏹 先行", "5": "🏹 居中", "6": "🏹 中後",
