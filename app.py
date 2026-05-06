@@ -2,11 +2,12 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
+from collections import Counter
 
 st.set_page_config(page_title="HKJC Race Simulator Pro", page_icon="🏇", layout="wide")
 
 st.title("🏇 HKJC Race Simulator Pro（最終專業版）")
-st.caption("GNN + 全因素模擬 + 批量貼上資料（你嘅格式）")
+st.caption("GNN + Pace Model + 全因素模擬 + 詳細投注統計")
 
 # ==================== 賽事資訊 ====================
 st.subheader("📝 賽事資訊")
@@ -81,8 +82,7 @@ if st.session_state.get('generated', False):
                     parts = [p.strip() for p in line.split(',')]
                     
                     if len(parts) >= 8:
-                        # 格式：1.出賽,7,135,5,40,7,4,5678
-                        first_part = parts[0]  # 例如 "1.出賽"
+                        first_part = parts[0]
                         
                         if '.' in first_part:
                             horse_num = int(first_part.split('.')[0])
@@ -99,7 +99,6 @@ if st.session_state.get('generated', False):
                         recent = max(1, min(10, int(parts[5])))
                         stable = max(1, min(10, int(parts[6])))
                         
-                        # 跑法
                         run_codes = parts[7] if len(parts) > 7 else ""
                         run_map = {
                             "1": "🏹 大逃", "2": "🏹 逃放", "3": "🏹 前置",
@@ -180,7 +179,7 @@ if st.session_state.get('generated', False):
             if len(valid_horses) < 3:
                 st.error("⚠️ 至少需要 3 匹馬填寫完整資料先可以模擬！")
             else:
-                # GNN + 全因素
+                # ==================== GNN + Pace Model ====================
                 valid_horses = valid_horses.copy()
                 
                 base_score = (
@@ -204,6 +203,17 @@ if st.session_state.get('generated', False):
                     if "大逃" in str(row['跑法']): score += 2.0
                     if "後上" in str(row['跑法']) or "後追" in str(row['跑法']): score += 1.5
                     if "居中" in str(row['跑法']): score += 1.3
+                    
+                    # Pace Model
+                    front_runners = sum(1 for _, r in valid_horses.iterrows() if "大逃" in str(r['跑法']) or "逃放" in str(r['跑法']))
+                    
+                    if front_runners >= 2:
+                        if "後上" in str(row['跑法']) or "後追" in str(row['跑法']): score += 3.5
+                        if "大逃" in str(row['跑法']) or "逃放" in str(row['跑法']): score -= 2.5
+                    elif front_runners == 1:
+                        if "大逃" in str(row['跑法']) or "逃放" in str(row['跑法']): score += 1.5
+                    else:
+                        if "後上" in str(row['跑法']) or "後追" in str(row['跑法']): score += 2.0
                     
                     if distance <= 1200:
                         if "大逃" in str(row['跑法']) or "逃放" in str(row['跑法']): score += 3.5
@@ -262,46 +272,81 @@ if st.session_state.get('generated', False):
                 valid_horses['GNN_增強分'] = valid_horses.apply(gnn_interaction, axis=1)
                 valid_horses['實力分'] = (base_score + valid_horses['GNN_增強分'] * 0.65).round(1)
                 
+                # ==================== 10次模擬 + 詳細統計 ====================
                 all_results = []
+                all_full_results = []  # 用於統計連贏、三重彩等
+                
                 for _ in range(10):
                     results = []
+                    full_results = []
                     for _ in range(5000):
                         times = {row['馬號']: 70 - (row['實力分']-50)*0.08 + (row['檔位']-1)*0.08 + np.random.normal(0, 1.2) 
                                  for _, row in valid_horses.iterrows()}
                         sorted_horses = sorted(times.items(), key=lambda x: x[1])
-                        results.append([h[0] for h in sorted_horses[:4]])
+                        
+                        top4 = [h[0] for h in sorted_horses[:4]]
+                        results.append(top4[0])  # 獨贏
+                        full_results.append(tuple(top4))  # 完整前4名
+                    
                     all_results.extend(results)
+                    all_full_results.extend(full_results)
                 
-                stats = {}
-                for horse in valid_horses['馬號']:
-                    stats[horse] = {'第一名次數': 0, '頭兩名內次數': 0, '頭三名內次數': 0, '頭四名內次數': 0, '總分數': 0}
+                # 統計
+                win_count = Counter(all_results)
+                quinella_count = Counter()
+                trio_count = Counter()
+                tierce_count = Counter()
+                quartet_count = Counter()
+                first4_count = Counter()
                 
-                for result in all_results:
-                    for rank, horse in enumerate(result, 1):
-                        if horse in stats:
-                            if rank == 1: stats[horse]['第一名次數'] += 1
-                            if rank <= 2: stats[horse]['頭兩名內次數'] += 1
-                            if rank <= 3: stats[horse]['頭三名內次數'] += 1
-                            if rank <= 4: stats[horse]['頭四名內次數'] += 1
-                            
-                            if rank == 1: stats[horse]['總分數'] += 6
-                            elif rank == 2: stats[horse]['總分數'] += 5
-                            elif rank == 3: stats[horse]['總分數'] += 4
-                            elif rank == 4: stats[horse]['總分數'] += 3
-                            elif rank == 5: stats[horse]['總分數'] += 2
-                            elif rank == 6: stats[horse]['總分數'] += 1
-                            else: stats[horse]['總分數'] -= 3
+                for res in all_full_results:
+                    # 連贏
+                    quinella_count[tuple(sorted(res[:2]))] += 1
+                    # 位置Q
+                    trio_count[tuple(sorted(res[:3]))] += 1
+                    # 單T
+                    tierce_count[res[:3]] += 1
+                    # 三重彩
+                    tierce_count[res[:3]] += 1
+                    # 四連環
+                    first4_count[tuple(sorted(res))] += 1
+                    # 四重彩
+                    quartet_count[res] += 1
                 
-                result_df = pd.DataFrame.from_dict(stats, orient='index').reset_index()
-                result_df.columns = ['馬號', '第一名次數', '頭兩名內次數', '頭三名內次數', '頭四名內次數', '總分數']
-                result_df = result_df.sort_values('總分數', ascending=False)
+                # 顯示結果
+                st.subheader("📈 10次專業模擬結果")
                 
-                st.subheader("📈 10次專業模擬結果（已考慮所有因素）")
-                st.dataframe(result_df, use_container_width=True, hide_index=True)
+                # 最多獨贏
+                most_win = win_count.most_common(1)[0]
+                st.write(f"**最多獨贏**：馬號 {most_win[0]}（{most_win[1]} 場）")
                 
-                st.success("✅ 10次專業模擬完成！已結合：馬場 + 距離 + 場地 + 天氣 + 班級 + 騎師 + GNN")
+                # 最多連贏
+                most_quinella = quinella_count.most_common(1)[0]
+                st.write(f"**最多連贏**：馬號 {most_quinella[0][0]} & {most_quinella[0][1]}（{most_quinella[1]} 場）")
+                
+                # 最多位置Q
+                most_trio = trio_count.most_common(1)[0]
+                st.write(f"**最多位置Q**：馬號 {most_trio[0][0]} & {most_trio[0][1]}（{most_trio[1]} 場）")
+                
+                # 最多單T
+                most_tierce = tierce_count.most_common(1)[0]
+                st.write(f"**最多單T**：馬號 {most_tierce[0][0]} → {most_tierce[0][1]} → {most_tierce[0][2]}（{most_tierce[1]} 場）")
+                
+                # 最多三重彩
+                most_tierce = tierce_count.most_common(1)[0]
+                st.write(f"**最多三重彩**：馬號 {most_tierce[0][0]} → {most_tierce[0][1]} → {most_tierce[0][2]}（{most_tierce[1]} 場）")
+                
+                # 最多四連環
+                most_first4 = first4_count.most_common(1)[0]
+                st.write(f"**最多四連環**：馬號 {most_first4[0][0]} & {most_first4[0][1]} & {most_first4[0][2]} & {most_first4[0][3]}（{most_first4[1]} 場）")
+                
+                # 最多四重彩
+                most_quartet = quartet_count.most_common(1)[0]
+                st.write(f"**最多四重彩**：馬號 {most_quartet[0][0]} → {most_quartet[0][1]} → {most_quartet[0][2]} → {most_quartet[0][3]}（{most_quartet[1]} 場）")
+                
+                st.success("✅ 10次專業模擬完成！已結合 GNN + Pace Model + 全因素")
     else:
         st.warning("⚠️ 至少需要 3 匹出賽馬先可以模擬！")
 
 st.divider()
-st.caption("💡 最終專業版：全因素模擬 + 批量貼上資料（你嘅格式）")
+st.caption("💡 最終專業版：全因素 + Pace Model + 詳細投注統計")
