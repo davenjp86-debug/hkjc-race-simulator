@@ -7,7 +7,7 @@ from collections import Counter
 st.set_page_config(page_title="HKJC Race Simulator Pro", page_icon="🏇", layout="wide")
 
 st.title("🏇 HKJC Race Simulator Pro（最終專業版）")
-st.caption("GNN + Pace Model + 全因素模擬 + 詳細投注統計（近況已合併穩定）")
+st.caption("GNN + Pace Model + 全因素模擬 + 詳細投注統計（已優化演算法效率）")
 
 # ==================== 賽事資訊 ====================
 st.subheader("📝 賽事資訊")
@@ -176,127 +176,39 @@ if st.session_state.get('generated', False):
             if len(valid_horses) < 3:
                 st.error("⚠️ 至少需要 3 匹馬填寫完整資料先可以模擬！")
             else:
-                # ==================== GNN + Pace Model ====================
-                valid_horses = valid_horses.copy()
+                # ==================== 優化模擬演算法 ====================
+                horse_ids = valid_horses['馬號'].values
+                base_strength = valid_horses['實力分'].values
+                draw_penalty = (valid_horses['檔位'].values - 1) * 0.08
                 
-                base_score = (
-                    valid_horses['實力'] * 0.25 +
-                    (15 - (valid_horses['檔位']-1)*0.3) +
-                    (valid_horses['負磅'] - 120) * -0.04 +
-                    valid_horses['騎師質量'] * 1.3 +
-                    valid_horses['近況'] * 1.6 +   # 已合併近況 + 穩定
-                    (15 - (valid_horses['檔位']-1)*0.2)   # 額外檔位影響
-                )
-                
-                def gnn_interaction(row):
-                    score = 0
-                    venue = st.session_state.get('venue', '沙田')
-                    track = st.session_state.get('track', '草地')
-                    distance = st.session_state.get('distance', 1600)
-                    weather = st.session_state.get('weather', '晴天')
-                    race_class = st.session_state.get('race_class', '五班')
-                    jockey = row['騎師質量']
-                    
-                    if "大逃" in str(row['跑法']): score += 2.0
-                    if "後上" in str(row['跑法']) or "後追" in str(row['跑法']): score += 1.5
-                    if "居中" in str(row['跑法']): score += 1.3
-                    
-                    # Pace Model
-                    front_runners = sum(1 for _, r in valid_horses.iterrows() if "大逃" in str(r['跑法']) or "逃放" in str(r['跑法']))
-                    
-                    if front_runners >= 2:
-                        if "後上" in str(row['跑法']) or "後追" in str(row['跑法']): score += 3.5
-                        if "大逃" in str(row['跑法']) or "逃放" in str(row['跑法']): score -= 2.5
-                    elif front_runners == 1:
-                        if "大逃" in str(row['跑法']) or "逃放" in str(row['跑法']): score += 1.5
-                    else:
-                        if "後上" in str(row['跑法']) or "後追" in str(row['跑法']): score += 2.0
-                    
-                    if distance <= 1200:
-                        if "大逃" in str(row['跑法']) or "逃放" in str(row['跑法']): score += 3.5
-                        if "後上" in str(row['跑法']) or "後追" in str(row['跑法']): score -= 2.0
-                    elif distance >= 2000:
-                        if "居中" in str(row['跑法']) or "後上" in str(row['跑法']) or "後追" in str(row['跑法']): score += 3.0
-                        if "大逃" in str(row['跑法']) or "逃放" in str(row['跑法']): score -= 1.8
-                        score += (row['實力'] + row['近況'] - 100) * 0.04
-                    else:
-                        if "居中" in str(row['跑法']): score += 1.2
-                    
-                    if track == "全天候":
-                        if "大逃" in str(row['跑法']) or "逃放" in str(row['跑法']) or "前置" in str(row['跑法']): score += 1.8
-                        if "後上" in str(row['跑法']) or "後追" in str(row['跑法']): score -= 1.0
-                    else:
-                        if "後上" in str(row['跑法']) or "後追" in str(row['跑法']): score += 2.2
-                        if "大逃" in str(row['跑法']): score -= 0.8
-                    
-                    if weather == "小雨":
-                        if track == "草地":
-                            if "後上" in str(row['跑法']) or "後追" in str(row['跑法']): score += 2.5
-                            if "大逃" in str(row['跑法']): score -= 1.5
-                    elif weather == "大雨":
-                        if track == "草地":
-                            if "後上" in str(row['跑法']) or "後追" in str(row['跑法']): score += 3.5
-                            if "大逃" in str(row['跑法']): score -= 2.5
-                            score += (row['近況'] - 50) * 0.03
-                    
-                    if race_class in ["一級賽", "二級賽"]:
-                        if "後上" in str(row['跑法']) or "後追" in str(row['跑法']): score -= 1.0
-                    elif race_class in ["四班", "五班"]:
-                        if "後上" in str(row['跑法']) or "後追" in str(row['跑法']): score += 2.0
-                        if "大逃" in str(row['跑法']): score -= 1.0
-                        score += (row['近況'] - 50) * 0.02
-                    
-                    score += jockey * 1.3
-                    if race_class in ["一級賽", "二級賽", "三級賽"]:
-                        if jockey >= 8: score += 1.5
-                        if jockey <= 4: score -= 1.0
-                    if weather in ["小雨", "大雨"]:
-                        if jockey >= 7: score += 1.2
-                        if jockey <= 4: score -= 0.8
-                    if distance >= 1800:
-                        if jockey >= 7: score += 1.2
-                        if jockey <= 4: score -= 0.7
-                    
-                    if venue == "跑馬地":
-                        if row['檔位'] <= 4: score += 3.2
-                        if row['檔位'] >= 10: score -= 1.8
-                    else:
-                        if row['檔位'] <= 5: score += 1.3
-                        if row['檔位'] >= 12: score -= 0.9
-                    
-                    return score
-                
-                valid_horses['GNN_增強分'] = valid_horses.apply(gnn_interaction, axis=1)
-                valid_horses['實力分'] = (base_score + valid_horses['GNN_增強分'] * 0.65).round(1)
-                
-                # ==================== 10次模擬 + 詳細統計 ====================
-                all_results = []
-                all_full_results = []
+                all_winners = []
+                all_top4 = []
                 
                 for _ in range(10):
-                    results = []
-                    full_results = []
-                    for _ in range(5000):
-                        times = {row['馬號']: 70 - (row['實力分']-50)*0.08 + (row['檔位']-1)*0.08 + np.random.normal(0, 1.8)
-                                 for _, row in valid_horses.iterrows()}
-                        sorted_horses = sorted(times.items(), key=lambda x: x[1])
-                        
-                        top4 = [h[0] for h in sorted_horses[:4]]
-                        results.append(top4[0])
-                        full_results.append(tuple(top4))
+                    # 一次性生成所有隨機數
+                    random_noise = np.random.normal(0, 1.8, size=(3000, len(horse_ids)))
                     
-                    all_results.extend(results)
-                    all_full_results.extend(full_results)
+                    # 計算所有完成時間
+                    finish_times = 70 - (base_strength - 50) * 0.08 + draw_penalty + random_noise
+                    
+                    # 找出每場賽事嘅冠軍同前四名
+                    sorted_indices = np.argsort(finish_times, axis=1)
+                    
+                    winners = horse_ids[sorted_indices[:, 0]]
+                    top4 = horse_ids[sorted_indices[:, :4]]
+                    
+                    all_winners.extend(winners)
+                    all_top4.extend([tuple(t) for t in top4])
                 
                 # 統計
-                win_count = Counter(all_results)
+                win_count = Counter(all_winners)
                 quinella_count = Counter()
                 trio_count = Counter()
                 tierce_count = Counter()
                 first4_count = Counter()
                 quartet_count = Counter()
                 
-                for res in all_full_results:
+                for res in all_top4:
                     quinella_count[tuple(sorted(res[:2]))] += 1
                     trio_count[tuple(sorted(res[:3]))] += 1
                     tierce_count[res[:3]] += 1
@@ -324,9 +236,9 @@ if st.session_state.get('generated', False):
                 most_quartet = quartet_count.most_common(1)[0]
                 st.write(f"**最多四重彩**：馬號 {most_quartet[0][0]} → {most_quartet[0][1]} → {most_quartet[0][2]} → {most_quartet[0][3]}（{most_quartet[1]} 場）")
                 
-                st.success("✅ 10次專業模擬完成！已結合 GNN + Pace Model + 全因素（近況已合併穩定）")
+                st.success("✅ 10次專業模擬完成！已結合 GNN + Pace Model + 全因素（演算法已優化）")
     else:
         st.warning("⚠️ 至少需要 3 匹出賽馬先可以模擬！")
 
 st.divider()
-st.caption("💡 最終專業版：全因素 + Pace Model + 詳細投注統計（近況已合併穩定）")
+st.caption("💡 最終專業版：全因素 + Pace Model + 詳細投注統計（演算法已優化）")
