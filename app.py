@@ -7,7 +7,7 @@ from collections import Counter
 st.set_page_config(page_title="HKJC Race Simulator Pro", page_icon="🏇", layout="wide")
 
 st.title("🏇 HKJC Race Simulator Pro（最終專業版）")
-st.caption("GNN + Pace Model + 全因素模擬 + 詳細投注統計（已降低騎師比重 + 增加隨機性）")
+st.caption("GNN + Pace Model + 全因素模擬 + 詳細投注統計（近況已合併穩定）")
 
 # ==================== 賽事資訊 ====================
 st.subheader("📝 賽事資訊")
@@ -52,7 +52,7 @@ if st.button("🚀 生成賽事", type="primary"):
         data.append({
             "馬號": i, "狀態": "出賽", "檔位": None, "負磅": None,
             "騎師質量": None, "實力": None,
-            "近況": None, "穩定": None, "跑法": ""
+            "近況": None, "跑法": ""
         })
     st.session_state['df'] = pd.DataFrame(data)
 
@@ -66,9 +66,9 @@ if st.session_state.get('generated', False):
     st.divider()
     st.subheader("📋 批量貼上馬匹資料（從記事本複製）")
     
-    st.info("格式範例：1.出賽,7,135,5,40,7,4,5678")
+    st.info("格式範例：1.出賽,7,135,5,40,7,5678（7個數字 + 跑法）")
     
-    batch_input = st.text_area("貼上馬匹資料", height=200, placeholder="例如：\n1.出賽,7,135,5,40,7,4,5678\n2.出賽,6,134,10,38,5,4,12")
+    batch_input = st.text_area("貼上馬匹資料", height=200, placeholder="例如：\n1.出賽,7,135,5,40,7,5678\n2.出賽,6,134,10,38,5,4,12")
     
     if st.button("🚀 套用批量資料", type="primary"):
         if batch_input.strip() == "":
@@ -81,7 +81,7 @@ if st.session_state.get('generated', False):
                 for line in lines:
                     parts = [p.strip() for p in line.split(',')]
                     
-                    if len(parts) >= 8:
+                    if len(parts) >= 7:
                         first_part = parts[0]
                         
                         if '.' in first_part:
@@ -97,9 +97,8 @@ if st.session_state.get('generated', False):
                         jockey = max(1, min(10, int(parts[3])))
                         power = max(1, min(100, int(parts[4])))
                         recent = max(1, min(10, int(parts[5])))
-                        stable = max(1, min(10, int(parts[6])))
                         
-                        run_codes = parts[7] if len(parts) > 7 else ""
+                        run_codes = parts[6] if len(parts) > 6 else ""
                         run_map = {
                             "1": "🏹 大逃", "2": "🏹 逃放", "3": "🏹 前置",
                             "4": "🏹 先行", "5": "🏹 居中", "6": "🏹 中後",
@@ -121,7 +120,6 @@ if st.session_state.get('generated', False):
                             "騎師質量": jockey,
                             "實力": power,
                             "近況": recent,
-                            "穩定": stable,
                             "跑法": run_style
                         })
                 
@@ -151,8 +149,8 @@ if st.session_state.get('generated', False):
     with col5: new_recent = st.number_input("近況", 1, 10, int(current['近況']) if pd.notna(current['近況']) else 5)
     
     col6, col7 = st.columns(2)
-    with col6: new_stable = st.number_input("穩定", 1, 10, int(current['穩定']) if pd.notna(current['穩定']) else 5)
-    with col7: new_status = st.selectbox("狀態", ["出賽", "退出", "落馬"], index=0)
+    with col6: new_status = st.selectbox("狀態", ["出賽", "退出", "落馬"], index=0)
+    with col7: pass
     
     running_styles = ["🏹 大逃", "🏹 逃放", "🏹 前置", "🏹 先行", "🏹 居中", "🏹 中後", "🏹 留後", "🏹 後上", "🏹 後追"]
     selected_styles = st.multiselect("跑法（可多選）", running_styles, default=current['跑法'].split(", ") if current['跑法'] else [])
@@ -163,7 +161,6 @@ if st.session_state.get('generated', False):
         df.loc[df['馬號'] == horse_num, '騎師質量'] = new_jockey
         df.loc[df['馬號'] == horse_num, '實力'] = new_power
         df.loc[df['馬號'] == horse_num, '近況'] = new_recent
-        df.loc[df['馬號'] == horse_num, '穩定'] = new_stable
         df.loc[df['馬號'] == horse_num, '狀態'] = new_status
         df.loc[df['馬號'] == horse_num, '跑法'] = ", ".join(selected_styles) if selected_styles else ""
         st.session_state['df'] = df
@@ -174,7 +171,7 @@ if st.session_state.get('generated', False):
     
     if len(active_horses) >= 3:
         if st.button("🚀 10次專業模擬", type="primary"):
-            valid_horses = active_horses.dropna(subset=['檔位', '負磅', '騎師質量', '近況', '穩定', '實力'])
+            valid_horses = active_horses.dropna(subset=['檔位', '負磅', '騎師質量', '近況', '實力'])
             
             if len(valid_horses) < 3:
                 st.error("⚠️ 至少需要 3 匹馬填寫完整資料先可以模擬！")
@@ -186,9 +183,9 @@ if st.session_state.get('generated', False):
                     valid_horses['實力'] * 0.25 +
                     (15 - (valid_horses['檔位']-1)*0.3) +
                     (valid_horses['負磅'] - 120) * -0.04 +
-                    valid_horses['騎師質量'] * 1.3 +   # 已降低
-                    valid_horses['近況'] * 1.0 +
-                    valid_horses['穩定'] * 0.75
+                    valid_horses['騎師質量'] * 1.3 +
+                    valid_horses['近況'] * 1.6 +   # 已合併近況 + 穩定
+                    (15 - (valid_horses['檔位']-1)*0.2)   # 額外檔位影響
                 )
                 
                 def gnn_interaction(row):
@@ -221,7 +218,7 @@ if st.session_state.get('generated', False):
                     elif distance >= 2000:
                         if "居中" in str(row['跑法']) or "後上" in str(row['跑法']) or "後追" in str(row['跑法']): score += 3.0
                         if "大逃" in str(row['跑法']) or "逃放" in str(row['跑法']): score -= 1.8
-                        score += (row['實力'] + row['穩定'] - 100) * 0.04
+                        score += (row['實力'] + row['近況'] - 100) * 0.04
                     else:
                         if "居中" in str(row['跑法']): score += 1.2
                     
@@ -240,16 +237,15 @@ if st.session_state.get('generated', False):
                         if track == "草地":
                             if "後上" in str(row['跑法']) or "後追" in str(row['跑法']): score += 3.5
                             if "大逃" in str(row['跑法']): score -= 2.5
-                            score += (row['穩定'] - 50) * 0.03
+                            score += (row['近況'] - 50) * 0.03
                     
                     if race_class in ["一級賽", "二級賽"]:
                         if "後上" in str(row['跑法']) or "後追" in str(row['跑法']): score -= 1.0
                     elif race_class in ["四班", "五班"]:
                         if "後上" in str(row['跑法']) or "後追" in str(row['跑法']): score += 2.0
                         if "大逃" in str(row['跑法']): score -= 1.0
-                        score += (row['穩定'] - 50) * 0.02
+                        score += (row['近況'] - 50) * 0.02
                     
-                    # 騎師影響（已降低比重）
                     score += jockey * 1.3
                     if race_class in ["一級賽", "二級賽", "三級賽"]:
                         if jockey >= 8: score += 1.5
@@ -281,7 +277,7 @@ if st.session_state.get('generated', False):
                     results = []
                     full_results = []
                     for _ in range(5000):
-                        times = {row['馬號']: 70 - (row['實力分']-50)*0.08 + (row['檔位']-1)*0.08 + np.random.normal(0, 1.8)   # 已增加隨機性
+                        times = {row['馬號']: 70 - (row['實力分']-50)*0.08 + (row['檔位']-1)*0.08 + np.random.normal(0, 1.8)
                                  for _, row in valid_horses.iterrows()}
                         sorted_horses = sorted(times.items(), key=lambda x: x[1])
                         
@@ -328,9 +324,9 @@ if st.session_state.get('generated', False):
                 most_quartet = quartet_count.most_common(1)[0]
                 st.write(f"**最多四重彩**：馬號 {most_quartet[0][0]} → {most_quartet[0][1]} → {most_quartet[0][2]} → {most_quartet[0][3]}（{most_quartet[1]} 場）")
                 
-                st.success("✅ 10次專業模擬完成！已結合 GNN + Pace Model + 全因素（騎師比重已降低 + 隨機性已增加）")
+                st.success("✅ 10次專業模擬完成！已結合 GNN + Pace Model + 全因素（近況已合併穩定）")
     else:
         st.warning("⚠️ 至少需要 3 匹出賽馬先可以模擬！")
 
 st.divider()
-st.caption("💡 最終專業版：全因素 + Pace Model + 詳細投注統計（騎師比重降低 + 隨機性增加）")
+st.caption("💡 最終專業版：全因素 + Pace Model + 詳細投注統計（近況已合併穩定）")
