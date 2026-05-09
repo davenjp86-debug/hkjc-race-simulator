@@ -7,7 +7,7 @@ from collections import Counter
 st.set_page_config(page_title="HKJC Race Simulator Pro", page_icon="🏇", layout="wide")
 
 st.title("🏇 HKJC Race Simulator Pro（最終專業版）")
-st.caption("GNN + Pace Model + 全因素模擬 + 詳細投注統計（已修復 KeyError）")
+st.caption("GNN + Pace Model + 全因素模擬 + 詳細投注統計 + 詳細馬匹分析")
 
 # ==================== 賽事資訊 ====================
 st.subheader("📝 賽事資訊")
@@ -313,7 +313,7 @@ if st.session_state.get('generated', False):
                     all_winners.extend(winners)
                     all_top4.extend([tuple(t) for t in top4])
                 
-                # 統計
+                # ==================== 統計 ====================
                 win_count = Counter(all_winners)
                 quinella_count = Counter()
                 trio_count = Counter()
@@ -321,14 +321,22 @@ if st.session_state.get('generated', False):
                 first4_count = Counter()
                 quartet_count = Counter()
                 
+                # 計算每對馬號喺前三名出現嘅總次數
+                pair_in_top3 = Counter()
+                
                 for res in all_top4:
                     quinella_count[tuple(sorted(res[:2]))] += 1
                     trio_count[tuple(sorted(res[:3]))] += 1
                     tierce_count[res[:3]] += 1
                     first4_count[tuple(sorted(res))] += 1
                     quartet_count[res] += 1
+                    
+                    for i in range(3):
+                        for j in range(i+1, 3):
+                            pair = tuple(sorted([res[i], res[j]]))
+                            pair_in_top3[pair] += 1
                 
-                # 顯示結果
+                # ==================== 顯示結果 ====================
                 st.subheader("📈 10次專業模擬結果")
                 
                 most_win = win_count.most_common(1)[0]
@@ -337,8 +345,15 @@ if st.session_state.get('generated', False):
                 most_quinella = quinella_count.most_common(1)[0]
                 st.write(f"**最多連贏**：馬號 {most_quinella[0][0]} & {most_quinella[0][1]}（{most_quinella[1]} 場）")
                 
-                most_trio = trio_count.most_common(1)[0]
-                st.write(f"**最多位置Q**：馬號 {most_trio[0][0]} & {most_trio[0][1]}（{most_trio[1]} 場）")
+                # 顯示 6&13 喺前三名出現嘅總次數
+                if (6, 13) in pair_in_top3:
+                    st.write(f"**馬號 6&13 喺前三名出現總次數**：{pair_in_top3[(6, 13)]} 場")
+                
+                # 顯示前三最多位置Q組合
+                st.write("**前三最多位置Q組合：**")
+                top3_trio = trio_count.most_common(3)
+                for i, (combo, count) in enumerate(top3_trio, 1):
+                    st.write(f"{i}. 馬號 {combo[0]} & {combo[1]} & {combo[2]}（{count} 場）")
                 
                 most_tierce = tierce_count.most_common(1)[0]
                 st.write(f"**最多單T / 三重彩**：馬號 {most_tierce[0][0]} → {most_tierce[0][1]} → {most_tierce[0][2]}（{most_tierce[1]} 場）")
@@ -349,9 +364,45 @@ if st.session_state.get('generated', False):
                 most_quartet = quartet_count.most_common(1)[0]
                 st.write(f"**最多四重彩**：馬號 {most_quartet[0][0]} → {most_quartet[0][1]} → {most_quartet[0][2]} → {most_quartet[0][3]}（{most_quartet[1]} 場）")
                 
+                # ==================== 詳細馬匹分析 ====================
+                st.divider()
+                st.subheader("📊 詳細馬匹分析")
+                
+                # 計算每個馬號喺前三名嘅次數
+                horse_top3_count = Counter()
+                for res in all_top4:
+                    for horse in res:
+                        horse_top3_count[horse] += 1
+                
+                # 計算每個馬號與其他馬號嘅組合次數
+                horse_combo_count = {}
+                for horse in horse_ids:
+                    horse_combo_count[horse] = Counter()
+                
+                for res in all_top4:
+                    for horse in res:
+                        others = [h for h in res if h != horse]
+                        combo = tuple(sorted(others))
+                        horse_combo_count[horse][combo] += 1
+                
+                # 顯示每個馬號嘅詳細分析
+                for horse in sorted(horse_ids):
+                    st.write(f"**馬號 {horse}：**")
+                    st.write(f"  前三名次數：{horse_top3_count[horse]} 場")
+                    
+                    top3_combos = horse_combo_count[horse].most_common(3)
+                    if top3_combos:
+                        st.write(f"  與該馬位置Q最多嘅3個組合：")
+                        for i, (combo, count) in enumerate(top3_combos, 1):
+                            st.write(f"    {i}. 馬號 {combo[0]} & {combo[1]}（{count} 場）")
+                    else:
+                        st.write(f"  與該馬位置Q最多嘅3個組合：無數據")
+                    
+                    st.write("")
+                
                 st.success("✅ 10次專業模擬完成！已結合 GNN + Pace Model + 全因素（演算法已優化）")
     else:
         st.warning("⚠️ 至少需要 3 匹出賽馬先可以模擬！")
 
 st.divider()
-st.caption("💡 最終專業版：全因素 + Pace Model + 詳細投注統計（演算法已優化）")
+st.caption("💡 最終專業版：全因素 + Pace Model + 詳細投注統計 + 詳細馬匹分析")
