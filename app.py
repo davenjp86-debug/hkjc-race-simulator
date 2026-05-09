@@ -7,7 +7,7 @@ from collections import Counter
 st.set_page_config(page_title="HKJC Race Simulator Pro", page_icon="🏇", layout="wide")
 
 st.title("🏇 HKJC Race Simulator Pro（最終專業版）")
-st.caption("GNN + Pace Model + 全因素模擬 + 詳細投注統計（已優化演算法效率）")
+st.caption("GNN + Pace Model + 全因素模擬 + 詳細投注統計（已修復 KeyError）")
 
 # ==================== 賽事資訊 ====================
 st.subheader("📝 賽事資訊")
@@ -176,6 +176,124 @@ if st.session_state.get('generated', False):
             if len(valid_horses) < 3:
                 st.error("⚠️ 至少需要 3 匹馬填寫完整資料先可以模擬！")
             else:
+                # ==================== 計算實力分 ====================
+                valid_horses = valid_horses.copy()
+                
+                base_score = (
+                    valid_horses['實力'] * 0.25 +
+                    (15 - (valid_horses['檔位']-1)*0.3) +
+                    (valid_horses['負磅'] - 120) * -0.04 +
+                    valid_horses['騎師質量'] * 1.3 +
+                    valid_horses['近況'] * 1.6 +
+                    (15 - (valid_horses['檔位']-1)*0.2)
+                )
+                
+                def gnn_interaction(row):
+                    score = 0
+                    venue = st.session_state.get('venue', '沙田')
+                    track = st.session_state.get('track', '草地')
+                    distance = st.session_state.get('distance', 1600)
+                    weather = st.session_state.get('weather', '晴天')
+                    race_class = st.session_state.get('race_class', '五班')
+                    jockey = row['騎師質量']
+                    
+                    if "大逃" in str(row['跑法']): score += 2.0
+                    if "後上" in str(row['跑法']) or "後追" in str(row['跑法']): score += 1.5
+                    if "居中" in str(row['跑法']): score += 1.3
+                    
+                    # 跑馬地轉彎次數
+                    if venue == "跑馬地":
+                        if distance == 1000:
+                            turn_count = 1
+                        elif distance == 1200:
+                            turn_count = 2
+                        elif distance in [1650, 1800]:
+                            turn_count = 3
+                        else:
+                            turn_count = 4
+                        
+                        if row['檔位'] <= 3:
+                            score += 4.5 if distance <= 1200 else 3.8
+                        if row['檔位'] >= 9:
+                            score -= 2.8 if distance <= 1200 else 2.2
+                        
+                        if "大逃" in str(row['跑法']) or "逃放" in str(row['跑法']) or "前置" in str(row['跑法']):
+                            score += 2.2 if distance <= 1200 else 1.3
+                        
+                        if turn_count >= 3:
+                            if "後上" in str(row['跑法']) or "後追" in str(row['跑法']):
+                                score += 1.5 * (turn_count - 2)
+                            if "大逃" in str(row['跑法']):
+                                score -= 0.8 * (turn_count - 2)
+                    
+                    # Pace Model
+                    front_runners = sum(1 for _, r in valid_horses.iterrows() if "大逃" in str(r['跑法']) or "逃放" in str(r['跑法']))
+                    
+                    if front_runners >= 2:
+                        if "後上" in str(row['跑法']) or "後追" in str(row['跑法']): score += 3.5
+                        if "大逃" in str(row['跑法']) or "逃放" in str(row['跑法']): score -= 2.5
+                    elif front_runners == 1:
+                        if "大逃" in str(row['跑法']) or "逃放" in str(row['跑法']): score += 1.5
+                    else:
+                        if "後上" in str(row['跑法']) or "後追" in str(row['跑法']): score += 2.0
+                    
+                    if distance <= 1200:
+                        if "大逃" in str(row['跑法']) or "逃放" in str(row['跑法']): score += 3.5
+                        if "後上" in str(row['跑法']) or "後追" in str(row['跑法']): score -= 2.0
+                    elif distance >= 2000:
+                        if "居中" in str(row['跑法']) or "後上" in str(row['跑法']) or "後追" in str(row['跑法']): score += 3.0
+                        if "大逃" in str(row['跑法']) or "逃放" in str(row['跑法']): score -= 1.8
+                        score += (row['實力'] + row['近況'] - 100) * 0.04
+                    else:
+                        if "居中" in str(row['跑法']): score += 1.2
+                    
+                    if track == "全天候":
+                        if "大逃" in str(row['跑法']) or "逃放" in str(row['跑法']) or "前置" in str(row['跑法']): score += 1.8
+                        if "後上" in str(row['跑法']) or "後追" in str(row['跑法']): score -= 1.0
+                    else:
+                        if "後上" in str(row['跑法']) or "後追" in str(row['跑法']): score += 2.2
+                        if "大逃" in str(row['跑法']): score -= 0.8
+                    
+                    if weather == "小雨":
+                        if track == "草地":
+                            if "後上" in str(row['跑法']) or "後追" in str(row['跑法']): score += 2.5
+                            if "大逃" in str(row['跑法']): score -= 1.5
+                    elif weather == "大雨":
+                        if track == "草地":
+                            if "後上" in str(row['跑法']) or "後追" in str(row['跑法']): score += 3.5
+                            if "大逃" in str(row['跑法']): score -= 2.5
+                            score += (row['近況'] - 50) * 0.03
+                    
+                    if race_class in ["一級賽", "二級賽"]:
+                        if "後上" in str(row['跑法']) or "後追" in str(row['跑法']): score -= 1.0
+                    elif race_class in ["四班", "五班"]:
+                        if "後上" in str(row['跑法']) or "後追" in str(row['跑法']): score += 2.0
+                        if "大逃" in str(row['跑法']): score -= 1.0
+                        score += (row['近況'] - 50) * 0.02
+                    
+                    score += jockey * 1.3
+                    if race_class in ["一級賽", "二級賽", "三級賽"]:
+                        if jockey >= 8: score += 1.5
+                        if jockey <= 4: score -= 1.0
+                    if weather in ["小雨", "大雨"]:
+                        if jockey >= 7: score += 1.2
+                        if jockey <= 4: score -= 0.8
+                    if distance >= 1800:
+                        if jockey >= 7: score += 1.2
+                        if jockey <= 4: score -= 0.7
+                    
+                    if venue == "跑馬地":
+                        if row['檔位'] <= 4: score += 3.2
+                        if row['檔位'] >= 10: score -= 1.8
+                    else:
+                        if row['檔位'] <= 5: score += 1.3
+                        if row['檔位'] >= 12: score -= 0.9
+                    
+                    return score
+                
+                valid_horses['GNN_增強分'] = valid_horses.apply(gnn_interaction, axis=1)
+                valid_horses['實力分'] = (base_score + valid_horses['GNN_增強分'] * 0.65).round(1)
+                
                 # ==================== 優化模擬演算法 ====================
                 horse_ids = valid_horses['馬號'].values
                 base_strength = valid_horses['實力分'].values
@@ -185,13 +303,8 @@ if st.session_state.get('generated', False):
                 all_top4 = []
                 
                 for _ in range(10):
-                    # 一次性生成所有隨機數
                     random_noise = np.random.normal(0, 1.8, size=(3000, len(horse_ids)))
-                    
-                    # 計算所有完成時間
                     finish_times = 70 - (base_strength - 50) * 0.08 + draw_penalty + random_noise
-                    
-                    # 找出每場賽事嘅冠軍同前四名
                     sorted_indices = np.argsort(finish_times, axis=1)
                     
                     winners = horse_ids[sorted_indices[:, 0]]
