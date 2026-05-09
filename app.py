@@ -349,11 +349,11 @@ if st.session_state.get('generated', False):
                 if (6, 13) in pair_in_top3:
                     st.write(f"**馬號 6&13 喺前三名出現總次數**：{pair_in_top3[(6, 13)]} 場")
                 
-                # 顯示前三最多位置Q組合
+                # 顯示前三最多位置Q組合（只顯示 2 匹馬）
                 st.write("**前三最多位置Q組合：**")
-                top3_trio = trio_count.most_common(3)
-                for i, (combo, count) in enumerate(top3_trio, 1):
-                    st.write(f"{i}. 馬號 {combo[0]} & {combo[1]} & {combo[2]}（{count} 場）")
+                top3_pair = pair_in_top3.most_common(3)
+                for i, (pair, count) in enumerate(top3_pair, 1):
+                    st.write(f"{i}. 馬號 {pair[0]} & {pair[1]}（{count} 場）")
                 
                 most_tierce = tierce_count.most_common(1)[0]
                 st.write(f"**最多單T / 三重彩**：馬號 {most_tierce[0][0]} → {most_tierce[0][1]} → {most_tierce[0][2]}（{most_tierce[1]} 場）")
@@ -374,29 +374,24 @@ if st.session_state.get('generated', False):
                     for horse in res:
                         horse_top3_count[horse] += 1
                 
-                # 計算每個馬號與其他馬號嘅組合次數
-                horse_combo_count = {}
-                for horse in horse_ids:
-                    horse_combo_count[horse] = Counter()
-                
-                for res in all_top4:
-                    for horse in res:
-                        others = [h for h in res if h != horse]
-                        combo = tuple(sorted(others))
-                        horse_combo_count[horse][combo] += 1
-                
                 # 顯示每個馬號嘅詳細分析
                 for horse in sorted(horse_ids):
-                    st.write(f"**馬號 {horse}：**")
-                    st.write(f"  前三名次數：{horse_top3_count[horse]} 場")
+                    st.write(f"馬號{horse}")
+                    st.write(f"前三名次數:{horse_top3_count[horse]}場")
+                    st.write("該馬前三是最常見3個位置Q組合:")
                     
-                    top3_combos = horse_combo_count[horse].most_common(3)
-                    if top3_combos:
-                        st.write(f"  與該馬位置Q最多嘅3個組合：")
-                        for i, (combo, count) in enumerate(top3_combos, 1):
-                            st.write(f"    {i}. 馬號 {combo[0]} & {combo[1]}（{count} 場）")
-                    else:
-                        st.write(f"  與該馬位置Q最多嘅3個組合：無數據")
+                    # 找出包含該馬號嘅所有兩兩組合
+                    horse_pairs = {}
+                    for (h1, h2), count in pair_in_top3.items():
+                        if horse in [h1, h2]:
+                            other = h1 if h2 == horse else h2
+                            horse_pairs[other] = count
+                    
+                    # 排序並顯示前三
+                    sorted_pairs = sorted(horse_pairs.items(), key=lambda x: x[1], reverse=True)[:3]
+                    
+                    for i, (other, count) in enumerate(sorted_pairs, 1):
+                        st.write(f"{i}.馬號{horse}&{other}({count}場)")
                     
                     st.write("")
                 
