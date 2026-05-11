@@ -195,17 +195,20 @@ if st.session_state.get('generated', False):
                 learned_data = load_learned_data()
                 horse_biases = learned_data.get('horse_biases', {})
                 
+                # 創建新欄位儲存調整後嘅實力（避免類型問題）
+                valid_horses['實力_調整後'] = valid_horses['實力'].astype(float)
+                
                 # 應用學習偏差
                 for idx, row in valid_horses.iterrows():
                     horse_str = str(row['馬號'])
                     if horse_str in horse_biases:
-                        valid_horses.loc[idx, '實力'] += horse_biases[horse_str] * 0.5
+                        valid_horses.loc[idx, '實力_調整後'] += horse_biases[horse_str] * 0.5
                 
                 # ==================== 計算實力分 ====================
                 valid_horses = valid_horses.copy()
                 
                 base_score = (
-                    valid_horses['實力'] * 0.25 +
+                    valid_horses['實力_調整後'] * 0.25 +
                     (15 - (valid_horses['檔位']-1)*0.3) +
                     (valid_horses['負磅'] - 120) * -0.04 +
                     valid_horses['騎師質量'] * 1.3 +
@@ -268,7 +271,7 @@ if st.session_state.get('generated', False):
                     elif distance >= 2000:
                         if "居中" in str(row['跑法']) or "後上" in str(row['跑法']) or "後追" in str(row['跑法']): score += 3.0
                         if "大逃" in str(row['跑法']) or "逃放" in str(row['跑法']): score -= 1.8
-                        score += (row['實力'] + row['近況'] - 100) * 0.04
+                        score += (row['實力_調整後'] + row['近況'] - 100) * 0.04
                     else:
                         if "居中" in str(row['跑法']): score += 1.2
                     
