@@ -3,11 +3,26 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 from collections import Counter
+import json
+import os
 
 st.set_page_config(page_title="HKJC Race Simulator Pro", page_icon="🏇", layout="wide")
 
 st.title("🏇 HKJC Race Simulator Pro（最終專業版）")
-st.caption("GNN + Pace Model + 全因素模擬 + 詳細投注統計 + 詳細馬匹分析")
+st.caption("GNN + Pace Model + 全因素模擬 + 詳細投注統計 + 詳細馬匹分析 + 自我學習")
+
+# ==================== JSON 檔案儲存功能 ====================
+DATA_FILE = "learned_data.json"
+
+def load_learned_data():
+    if os.path.exists(DATA_FILE):
+        with open(DATA_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    return {}
+
+def save_learned_data(data):
+    with open(DATA_FILE, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
 
 # ==================== 賽事資訊 ====================
 st.subheader("📝 賽事資訊")
@@ -72,7 +87,7 @@ if st.session_state.get('generated', False):
     
     if st.button("🚀 套用批量資料", type="primary"):
         if batch_input.strip() == "":
-            st.error("⚠️ 請先貼上資料！")
+            st.error("⚠️ 請輸入資料！")
         else:
             try:
                 lines = [line.strip() for line in batch_input.strip().split('\n') if line.strip()]
@@ -176,6 +191,16 @@ if st.session_state.get('generated', False):
             if len(valid_horses) < 3:
                 st.error("⚠️ 至少需要 3 匹馬填寫完整資料先可以模擬！")
             else:
+                # ==================== 讀取學習數據並應用 ====================
+                learned_data = load_learned_data()
+                horse_biases = learned_data.get('horse_biases', {})
+                
+                # 應用學習偏差
+                for idx, row in valid_horses.iterrows():
+                    horse_str = str(row['馬號'])
+                    if horse_str in horse_biases:
+                        valid_horses.loc[idx, '實力'] += horse_biases[horse_str] * 0.5
+                
                 # ==================== 計算實力分 ====================
                 valid_horses = valid_horses.copy()
                 
@@ -321,7 +346,6 @@ if st.session_state.get('generated', False):
                 first4_count = Counter()
                 quartet_count = Counter()
                 
-                # 計算每對馬號喺前三名出現嘅總次數
                 pair_in_top3 = Counter()
                 
                 for res in all_top4:
@@ -345,11 +369,9 @@ if st.session_state.get('generated', False):
                 most_quinella = quinella_count.most_common(1)[0]
                 st.write(f"**最多連贏**：馬號 {most_quinella[0][0]} & {most_quinella[0][1]}（{most_quinella[1]} 場）")
                 
-                # 顯示 6&13 喺前三名出現嘅總次數
                 if (6, 13) in pair_in_top3:
                     st.write(f"**馬號 6&13 喺前三名出現總次數**：{pair_in_top3[(6, 13)]} 場")
                 
-                # 顯示前三最多位置Q組合（只顯示 2 匹馬）
                 st.write("**前三最多位置Q組合：**")
                 top3_pair = pair_in_top3.most_common(3)
                 for i, (pair, count) in enumerate(top3_pair, 1):
@@ -368,26 +390,22 @@ if st.session_state.get('generated', False):
                 st.divider()
                 st.subheader("📊 詳細馬匹分析")
                 
-                # 計算每個馬號喺前三名嘅次數
                 horse_top3_count = Counter()
                 for res in all_top4:
                     for horse in res:
                         horse_top3_count[horse] += 1
                 
-                # 顯示每個馬號嘅詳細分析
                 for horse in sorted(horse_ids):
                     st.write(f"馬號{horse}")
                     st.write(f"前三名次數:{horse_top3_count[horse]}場")
                     st.write("該馬前三是最常見3個位置Q組合:")
                     
-                    # 找出包含該馬號嘅所有兩兩組合
                     horse_pairs = {}
                     for (h1, h2), count in pair_in_top3.items():
                         if horse in [h1, h2]:
                             other = h1 if h2 == horse else h2
                             horse_pairs[other] = count
                     
-                    # 排序並顯示前三
                     sorted_pairs = sorted(horse_pairs.items(), key=lambda x: x[1], reverse=True)[:3]
                     
                     for i, (other, count) in enumerate(sorted_pairs, 1):
@@ -395,9 +413,47 @@ if st.session_state.get('generated', False):
                     
                     st.write("")
                 
-                st.success("✅ 10次專業模擬完成！已結合 GNN + Pace Model + 全因素（演算法已優化）")
+                st.success("✅ 10次專業模擬完成！已結合 GNN + Pace Model + 全因素 + 自我學習")
     else:
         st.warning("⚠️ 至少需要 3 匹出賽馬先可以模擬！")
 
+# ==================== 真實賽果輸入 + 自我學習 ====================
 st.divider()
-st.caption("💡 最終專業版：全因素 + Pace Model + 詳細投注統計 + 詳細馬匹分析")
+st.subheader("📝 輸入真實賽果並自我學習")
+
+st.info("格式範例：2,3,4,5,9,11,8,6,7,10_1,12\n（_ 前面係名次順序，_ 後面係中途退出馬號）")
+
+race_result_input = st.text_input("輸入真實賽果", placeholder="例如：2,3,4,5,9,11,8,6,7,10_1,12")
+
+if st.button("📚 輸入真實賽果並學習", type="primary"):
+    if race_result_input.strip() == "":
+        st.error("⚠️ 請輸入真實賽果！")
+    else:
+        try:
+            parts = race_result_input.strip().split('_')
+            finish_order = [int(x.strip()) for x in parts[0].split(',')]
+            dnf = [int(x.strip()) for x in parts[1].split(',')] if len(parts) > 1 else []
+            
+            learned_data = load_learned_data()
+            
+            if 'horse_biases' not in learned_data:
+                learned_data['horse_biases'] = {}
+            
+            for rank, horse in enumerate(finish_order, 1):
+                horse_str = str(horse)
+                if horse_str not in learned_data['horse_biases']:
+                    learned_data['horse_biases'][horse_str] = 0.0
+                
+                bias_adjustment = (10 - rank) * 0.3
+                learned_data['horse_biases'][horse_str] += bias_adjustment
+            
+            save_learned_data(learned_data)
+            
+            st.success(f"✅ 學習完成！已更新 {len(finish_order)} 匹馬嘅數據")
+            st.info(f"📊 目前學習數據：{len(learned_data['horse_biases'])} 匹馬")
+            
+        except Exception as e:
+            st.error(f"⚠️ 解析失敗：{str(e)}")
+
+st.divider()
+st.caption("💡 最終專業版：全因素 + Pace Model + 詳細投注統計 + 詳細馬匹分析 + 自我學習")
