@@ -9,7 +9,7 @@ import os
 st.set_page_config(page_title="HKJC Race Simulator Pro", page_icon="🏇", layout="wide")
 
 st.title("🏇 HKJC Race Simulator Pro（最終專業版）")
-st.caption("GNN + Pace Model + 全因素模擬 + 詳細投注統計 + 詳細馬匹分析 + 自我學習")
+st.caption("GNN + Pace Model + 全因素模擬 + 詳細投注統計 + 詳細馬匹分析 + 模式學習")
 
 # ==================== JSON 檔案儲存功能 ====================
 DATA_FILE = "learned_data.json"
@@ -194,8 +194,14 @@ if st.session_state.get('generated', False):
                 # ==================== 讀取學習數據並應用 ====================
                 learned_data = load_learned_data()
                 horse_biases = learned_data.get('horse_biases', {})
+                learning_patterns = learned_data.get('learning_patterns', {
+                    'rainy_weather_closers': 0.0,
+                    'happy_valley_inner_barrier': 0.0,
+                    'long_distance_stamina': 0.0,
+                    'high_class_jockey': 0.0
+                })
                 
-                # 創建新欄位儲存調整後嘅實力（避免類型問題）
+                # 創建新欄位儲存調整後嘅實力
                 valid_horses['實力_調整後'] = valid_horses['實力'].astype(float)
                 
                 # 應用學習偏差
@@ -228,6 +234,23 @@ if st.session_state.get('generated', False):
                     if "大逃" in str(row['跑法']): score += 2.0
                     if "後上" in str(row['跑法']) or "後追" in str(row['跑法']): score += 1.5
                     if "居中" in str(row['跑法']): score += 1.3
+                    
+                    # 應用學習模式
+                    if weather in ["小雨", "大雨"] and track == "草地":
+                        if "後上" in str(row['跑法']) or "後追" in str(row['跑法']):
+                            score += learning_patterns.get('rainy_weather_closers', 0.0)
+                    
+                    if venue == "跑馬地":
+                        if row['檔位'] <= 3:
+                            score += learning_patterns.get('happy_valley_inner_barrier', 0.0)
+                    
+                    if distance >= 2000:
+                        if "居中" in str(row['跑法']) or "後上" in str(row['跑法']) or "後追" in str(row['跑法']):
+                            score += learning_patterns.get('long_distance_stamina', 0.0)
+                    
+                    if race_class in ["一級賽", "二級賽", "三級賽"]:
+                        if jockey >= 7:
+                            score += learning_patterns.get('high_class_jockey', 0.0)
                     
                     # 跑馬地轉彎次數
                     if venue == "跑馬地":
@@ -416,13 +439,13 @@ if st.session_state.get('generated', False):
                     
                     st.write("")
                 
-                st.success("✅ 10次專業模擬完成！已結合 GNN + Pace Model + 全因素 + 自我學習")
+                st.success("✅ 10次專業模擬完成！已結合 GNN + Pace Model + 全因素 + 模式學習")
     else:
         st.warning("⚠️ 至少需要 3 匹出賽馬先可以模擬！")
 
-# ==================== 真實賽果輸入 + 自我學習 ====================
+# ==================== 真實賽果輸入 + 模式學習 ====================
 st.divider()
-st.subheader("📝 輸入真實賽果並自我學習")
+st.subheader("📝 輸入真實賽果並模式學習")
 
 st.info("格式範例：2,3,4,5,9,11,8,6,7,10_1,12\n（_ 前面係名次順序，_ 後面係中途退出馬號）")
 
@@ -441,7 +464,15 @@ if st.button("📚 輸入真實賽果並學習", type="primary"):
             
             if 'horse_biases' not in learned_data:
                 learned_data['horse_biases'] = {}
+            if 'learning_patterns' not in learned_data:
+                learned_data['learning_patterns'] = {
+                    'rainy_weather_closers': 0.0,
+                    'happy_valley_inner_barrier': 0.0,
+                    'long_distance_stamina': 0.0,
+                    'high_class_jockey': 0.0
+                }
             
+            # 更新馬號偏差
             for rank, horse in enumerate(finish_order, 1):
                 horse_str = str(horse)
                 if horse_str not in learned_data['horse_biases']:
@@ -450,13 +481,53 @@ if st.button("📚 輸入真實賽果並學習", type="primary"):
                 bias_adjustment = (10 - rank) * 0.3
                 learned_data['horse_biases'][horse_str] += bias_adjustment
             
+            # 模式學習：分析這場賽事嘅特徵
+            venue = st.session_state.get('venue', '沙田')
+            track = st.session_state.get('track', '草地')
+            distance = st.session_state.get('distance', 1600)
+            weather = st.session_state.get('weather', '晴天')
+            race_class = st.session_state.get('race_class', '五班')
+            
+            # 計算實際贏家嘅特徵
+            winner = finish_order[0]  # 第一名馬號
+            
+            # 簡單模式學習邏輯
+            if weather in ["小雨", "大雨"] and track == "草地":
+                # 檢查贏家是否係後上型
+                winner_row = df[df['馬號'] == winner]
+                if not winner_row.empty:
+                    winner_run = str(winner_row.iloc[0]['跑法'])
+                    if "後上" in winner_run or "後追" in winner_run:
+                        learned_data['learning_patterns']['rainy_weather_closers'] += 0.2
+            
+            if venue == "跑馬地":
+                winner_row = df[df['馬號'] == winner]
+                if not winner_row.empty:
+                    winner_draw = winner_row.iloc[0]['檔位']
+                    if winner_draw <= 3:
+                        learned_data['learning_patterns']['happy_valley_inner_barrier'] += 0.2
+            
+            if distance >= 2000:
+                winner_row = df[df['馬號'] == winner]
+                if not winner_row.empty:
+                    winner_run = str(winner_row.iloc[0]['跑法'])
+                    if "居中" in winner_run or "後上" in winner_run or "後追" in winner_run:
+                        learned_data['learning_patterns']['long_distance_stamina'] += 0.2
+            
+            if race_class in ["一級賽", "二級賽", "三級賽"]:
+                winner_row = df[df['馬號'] == winner]
+                if not winner_row.empty:
+                    winner_jockey = winner_row.iloc[0]['騎師質量']
+                    if winner_jockey >= 7:
+                        learned_data['learning_patterns']['high_class_jockey'] += 0.2
+            
             save_learned_data(learned_data)
             
-            st.success(f"✅ 學習完成！已更新 {len(finish_order)} 匹馬嘅數據")
+            st.success(f"✅ 模式學習完成！已更新 {len(finish_order)} 匹馬 + 4 個模式")
             st.info(f"📊 目前學習數據：{len(learned_data['horse_biases'])} 匹馬")
             
         except Exception as e:
             st.error(f"⚠️ 解析失敗：{str(e)}")
 
 st.divider()
-st.caption("💡 最終專業版：全因素 + Pace Model + 詳細投注統計 + 詳細馬匹分析 + 自我學習")
+st.caption("💡 最終專業版：全因素 + Pace Model + 詳細投注統計 + 詳細馬匹分析 + 模式學習")
