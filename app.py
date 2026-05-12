@@ -439,29 +439,35 @@ if st.session_state.get('generated', False):
                     race_adjustment = race_adjustment / similar_races
                 
                 # ==================== Enhanced Monte Carlo Simulation ====================
-                st.subheader("🎲 Enhanced Monte Carlo Simulation（增強蒙地卡羅模擬）")
-                
-                with st.spinner("正在進行 50,000 次模擬..."):
-                    horse_ids = valid_horses['馬號'].values
-                    base_strength = valid_horses['實力分'].values
-                    draw_penalty = (valid_horses['檔位'].values - 1) * 0.08
-                    
-                    all_winners = []
-                    all_top4 = []
-                    
-                    # 增加到 50,000 次模擬（10 × 5000）
-                    for _ in range(10):
-                        random_noise = np.random.normal(0, 1.8, size=(5000, len(horse_ids)))
-                        finish_times = 70 - (base_strength - 50) * 0.08 + draw_penalty + random_noise
-                        sorted_indices = np.argsort(finish_times, axis=1)
-                        
-                        winners = horse_ids[sorted_indices[:, 0]]
-                        top4 = horse_ids[sorted_indices[:, :4]]
-                        
-                        all_winners.extend(winners)
-                        all_top4.extend([tuple(t) for t in top4])
-                
-                st.success(f"✅ 完成 50,000 次 Monte Carlo 模擬！")
+st.subheader("🎲 Enhanced Monte Carlo Simulation（增強蒙地卡羅模擬）")
+
+with st.spinner("正在進行 50,000 次模擬..."):
+    # 確保 '實力分' 欄位存在
+    if '實力分' not in valid_horses.columns:
+        # 重新計算 GNN_增強分 同 實力分
+        valid_horses['GNN_增強分'] = valid_horses.apply(gnn_interaction, axis=1)
+        valid_horses['實力分'] = (base_score + valid_horses['GNN_增強分'] * 0.65).round(1)
+    
+    horse_ids = valid_horses['馬號'].values
+    base_strength = valid_horses['實力分'].values
+    draw_penalty = (valid_horses['檔位'].values - 1) * 0.08
+    
+    all_winners = []
+    all_top4 = []
+    
+    # 50,000 次模擬（10 × 5000）
+    for _ in range(10):
+        random_noise = np.random.normal(0, 1.8, size=(5000, len(horse_ids)))
+        finish_times = 70 - (base_strength - 50) * 0.08 + draw_penalty + random_noise
+        sorted_indices = np.argsort(finish_times, axis=1)
+        
+        winners = horse_ids[sorted_indices[:, 0]]
+        top4 = horse_ids[sorted_indices[:, :4]]
+        
+        all_winners.extend(winners)
+        all_top4.extend([tuple(t) for t in top4])
+
+st.success(f"✅ 完成 50,000 次 Monte Carlo 模擬！")
                 
                 # ==================== 統計 ====================
                 win_count = Counter(all_winners)
