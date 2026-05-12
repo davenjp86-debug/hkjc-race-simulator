@@ -6,13 +6,11 @@ from collections import Counter
 import json
 import os
 from PIL import Image, ImageEnhance, ImageFilter
-import pytesseract
-import re
 
 st.set_page_config(page_title="HKJC Race Simulator Pro", page_icon="🏇", layout="wide")
 
 st.title("🏇 HKJC Race Simulator Pro（最終專業版）")
-st.caption("Enhanced Monte Carlo（50,000次）+ GNN + Optimized Pace Model + 全因素 + 詳細投注統計 + 賽事級學習 + Pace Scenario Analysis + Weight Sensitivity + OCR截圖識別")
+st.caption("Enhanced Monte Carlo（50,000次）+ GNN + Optimized Pace Model + 全因素 + 詳細投注統計 + 賽事級學習 + Pace Scenario Analysis + Weight Sensitivity")
 
 # ==================== JSON 檔案儲存功能 ====================
 DATA_FILE = "learned_data.json"
@@ -163,41 +161,76 @@ if st.session_state.get('generated', False):
     df = st.session_state['df']
     st.dataframe(df, use_container_width=True, hide_index=True)
     
-    # ==================== 批量貼上 + 截圖識別馬匹資料 ====================
+    # ==================== 馬匹資料輸入 ====================
     st.divider()
-    st.subheader("📋 馬匹資料輸入（批量貼上 / 截圖識別）")
+    st.subheader("📋 馬匹資料輸入")
     
-    tab1, tab2 = st.tabs(["批量貼上文字", "上傳截圖識別"])
+    st.info("""
+    **建議做法：**
+    1. 用手機「複製圖片文字」功能
+    2. 直接貼上文字到下面文字框
+    3. 按「套用批量資料」
+    """)
     
-    with tab1:
-        st.info("格式範例：1.出賽,7,135,5,40,7,5678")
-        batch_input = st.text_area("貼上馬匹資料", height=150)
-        
-        if st.button("🚀 套用批量資料", type="primary"):
-            if batch_input.strip():
-                # 解析邏輯（簡化版）
-                st.success("✅ 已套用批量資料！")
+    batch_input = st.text_area("貼上馬匹資料（或截圖文字）", height=150, 
+                               placeholder="例如：\n1.出賽,7,135,5,40,7,5678\n2.出賽,6,134,10,38,5,4,12")
     
-    with tab2:
-        horse_image = st.file_uploader("上傳馬匹列表截圖", type=['png', 'jpg', 'jpeg'], key="horse_img")
-        
-        if horse_image is not None:
-            image = Image.open(horse_image)
-            st.image(image, caption="馬匹截圖", use_container_width=True)
-            
-            if st.button("🔍 識別並自動填入", type="primary"):
-                with st.spinner("正在識別..."):
-                    try:
-                        gray = image.convert('L')
-                        enhanced = ImageEnhance.Contrast(gray).enhance(2.5)
-                        sharpened = enhanced.filter(ImageFilter.SHARPEN)
+    if st.button("🚀 套用批量資料", type="primary"):
+        if batch_input.strip():
+            try:
+                lines = [line.strip() for line in batch_input.strip().split('\n') if line.strip()]
+                new_data = []
+                
+                for line in lines:
+                    parts = [p.strip() for p in line.split(',')]
+                    if len(parts) >= 7:
+                        first_part = parts[0]
                         
-                        text = pytesseract.image_to_string(sharpened, lang='chi_tra+eng', config='--oem 3 --psm 6')
+                        if '.' in first_part:
+                            horse_num = int(first_part.split('.')[0])
+                            status = first_part.split('.')[1]
+                        else:
+                            horse_num = int(first_part)
+                            status = parts[1]
+                            parts = [status] + parts[1:]
                         
-                        st.text_area("識別結果", text, height=200)
-                        st.success("✅ 已成功識別馬匹資料！")
-                    except Exception as e:
-                        st.error(f"識別失敗：{str(e)}")
+                        draw = max(1, min(40, int(parts[1])))
+                        weight = max(100, min(140, int(parts[2])))
+                        jockey = max(1, min(10, int(parts[3])))
+                        power = max(1, min(100, int(parts[4])))
+                        recent = max(1, min(10, int(parts[5])))
+                        
+                        run_codes = parts[6] if len(parts) > 6 else ""
+                        run_map = {
+                            "1": "🏹 領放", "2": "🏹 居前", "3": "🏹 留後", "4": "🏹 後追"
+                        }
+                        
+                        run_styles = []
+                        for code in run_codes:
+                            if code in run_map:
+                                run_styles.append(run_map[code])
+                        
+                        run_style = ", ".join(run_styles) if run_styles else ""
+                        
+                        new_data.append({
+                            "馬號": horse_num,
+                            "狀態": status,
+                            "檔位": draw,
+                            "負磅": weight,
+                            "騎師質量": jockey,
+                            "實力": power,
+                            "近況": recent,
+                            "跑法": run_style
+                        })
+                
+                if new_data:
+                    st.session_state['df'] = pd.DataFrame(new_data)
+                    st.success(f"✅ 已成功套用 {len(new_data)} 匹馬嘅資料！")
+                    st.rerun()
+                else:
+                    st.error("未能解析到有效資料，請檢查格式！")
+            except Exception as e:
+                st.error(f"解析失敗：{str(e)}")
     
     # ==================== 編輯馬匹資料 ====================
     st.divider()
@@ -243,7 +276,6 @@ if st.session_state.get('generated', False):
                 st.write(f"**配速情景：** {pace_analysis['scenario']}")
                 st.info(pace_analysis['adjustment']['description'])
                 
-                # Monte Carlo 模擬
                 with st.spinner("正在進行 50,000 次模擬..."):
                     horse_ids = valid_horses['馬號'].values
                     base_strength = valid_horses['實力'].values.astype(float)
@@ -265,14 +297,12 @@ if st.session_state.get('generated', False):
                 
                 st.success("✅ 50,000 次 Monte Carlo 模擬完成！")
                 
-                # 統計結果
                 win_count = Counter(all_winners)
                 most_win = win_count.most_common(1)[0]
                 
                 st.subheader("📈 模擬結果")
                 st.write(f"**最多獨贏**：馬號 {most_win[0]}（{most_win[1]} 場，{round(most_win[1]/50000*100, 1)}%）")
                 
-                # 詳細馬匹分析
                 st.divider()
                 st.subheader("📊 詳細馬匹分析")
                 
@@ -288,29 +318,90 @@ if st.session_state.get('generated', False):
     else:
         st.warning("至少需要 3 匹出賽馬先可以模擬！")
 
-# ==================== 比賽結果截圖識別 ====================
+# ==================== 截圖功能提示 ====================
 st.divider()
-st.subheader("📸 上傳比賽結果截圖（自動學習）")
+st.subheader("📸 截圖功能提示")
 
-result_image = st.file_uploader("選擇賽果截圖", type=['png', 'jpg', 'jpeg'], key="result_final")
+st.info("""
+**截圖識別功能暫時需要本地安裝**
 
-if result_image is not None:
-    image = Image.open(result_image)
-    st.image(image, caption="賽果截圖", use_container_width=True)
-    
-    if st.button("🔍 識別賽果並學習", type="primary"):
-        with st.spinner("正在識別..."):
-            try:
-                gray = image.convert('L')
-                enhanced = ImageEnhance.Contrast(gray).enhance(2.5)
-                sharpened = enhanced.filter(ImageFilter.SHARPEN)
-                
-                text = pytesseract.image_to_string(sharpened, lang='chi_tra+eng', config='--oem 3 --psm 6')
-                
-                st.text_area("識別結果", text, height=200)
-                st.success("✅ 已成功識別賽果！")
-            except Exception as e:
-                st.error(f"識別失敗：{str(e)}")
+由於 Streamlit Cloud 環境限制，OCR 功能暫時無法使用。
+
+**建議做法：**
+1. 用手機「複製圖片文字」功能
+2. 直接貼上文字到 App
+3. App 會自動解析並學習
+
+這樣一樣可以達到自動輸入嘅效果！
+""")
+
+# ==================== 比賽結果輸入 ====================
+st.divider()
+st.subheader("📝 輸入真實賽果並學習")
+
+st.info("格式範例：2,3,4,5,9,11,8,6,7,10_1,12")
+
+race_result_input = st.text_input("輸入真實賽果", placeholder="例如：2,3,4,5,9,11,8,6,7,10_1,12")
+
+if st.button("📚 輸入真實賽果並學習", type="primary"):
+    if race_result_input.strip():
+        try:
+            parts = race_result_input.strip().split('_')
+            finish_order = [int(x.strip()) for x in parts[0].split(',')]
+            dnf = [int(x.strip()) for x in parts[1].split(',')] if len(parts) > 1 else []
+            
+            learned_data = load_learned_data()
+            
+            if 'learning_patterns' not in learned_data:
+                learned_data['learning_patterns'] = {
+                    'rainy_weather_closers': 0.0,
+                    'happy_valley_inner_barrier': 0.0,
+                    'long_distance_stamina': 0.0,
+                    'high_class_jockey': 0.0
+                }
+            if 'race_history' not in learned_data:
+                learned_data['race_history'] = []
+            
+            current_signature = {
+                'venue': venue,
+                'distance': distance,
+                'weather': weather,
+                'track': track,
+                'race_class': race_class,
+                'front_runners': sum(1 for _, r in df.iterrows() if "大逃" in str(r['跑法']) or "逃放" in str(r['跑法']))
+            }
+            
+            race_record = {
+                'race_id': f"{venue}_{distance}_{weather}_{len(learned_data['race_history'])}",
+                'signature': current_signature,
+                'prediction_error': 0.0,
+                'actual_winner': finish_order[0] if finish_order else None,
+                'actual_winner_type': '未知',
+                'lesson': '從呢場賽事學到嘅教訓'
+            }
+            
+            winner = finish_order[0] if finish_order else None
+            if winner:
+                winner_row = df[df['馬號'] == winner]
+                if not winner_row.empty:
+                    winner_run = str(winner_row.iloc[0]['跑法'])
+                    if "後上" in winner_run or "後追" in winner_run:
+                        race_record['actual_winner_type'] = '後上型'
+                        if weather in ["小雨", "大雨"] and track == "草地":
+                            learned_data['learning_patterns']['rainy_weather_closers'] += 0.3
+            
+            learned_data['race_history'].append(race_record)
+            
+            if len(learned_data['race_history']) > 50:
+                learned_data['race_history'] = learned_data['race_history'][-50:]
+            
+            save_learned_data(learned_data)
+            
+            st.success(f"✅ 賽事級學習完成！已記錄賽事 + 更新模式")
+            st.info(f"📊 目前學習數據：{len(learned_data['race_history'])} 場賽事")
+            
+        except Exception as e:
+            st.error(f"解析失敗：{str(e)}")
 
 st.divider()
-st.caption("💡 最終專業版：Enhanced Monte Carlo（50,000次）+ GNN + Optimized Pace Model + 詳細投注統計 + 賽事級學習 + Pace Scenario Analysis + Weight Sensitivity + OCR截圖識別")
+st.caption("💡 最終專業版：Enhanced Monte Carlo（50,000次）+ GNN + Optimized Pace Model + 詳細投注統計 + 賽事級學習 + Pace Scenario Analysis + Weight Sensitivity")
