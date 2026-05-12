@@ -9,7 +9,7 @@ import os
 st.set_page_config(page_title="HKJC Race Simulator Pro", page_icon="🏇", layout="wide")
 
 st.title("🏇 HKJC Race Simulator Pro（最終專業版）")
-st.caption("GNN + Pace Model + 全因素模擬 + 詳細投注統計 + 詳細馬匹分析 + 賽事級學習")
+st.caption("GNN + Optimized Pace Model + 全因素模擬 + 詳細投注統計 + 詳細馬匹分析 + 賽事級學習 + Pace Scenario Analysis + Weight Sensitivity + GNN Integration")
 
 # ==================== JSON 檔案儲存功能 ====================
 DATA_FILE = "learned_data.json"
@@ -23,6 +23,205 @@ def load_learned_data():
 def save_learned_data(data):
     with open(DATA_FILE, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+
+# ==================== Optimized Pace Model 功能 ====================
+def optimized_pace_model(row, front_runners, distance, venue, weather, race_class):
+    score = 0
+    
+    if front_runners >= 4:
+        if "後上" in str(row['跑法']) or "後追" in str(row['跑法']):
+            score += 5.0 + (front_runners - 3) * 0.5
+        if "大逃" in str(row['跑法']) or "逃放" in str(row['跑法']):
+            score -= 3.5
+    elif front_runners >= 2:
+        if "後上" in str(row['跑法']) or "後追" in str(row['跑法']):
+            score += 3.0 + (front_runners - 2) * 0.3
+        if "大逃" in str(row['跑法']) or "逃放" in str(row['跑法']):
+            score -= 2.0
+    elif front_runners == 1:
+        if "大逃" in str(row['跑法']) or "逃放" in str(row['跑法']):
+            score += 2.5
+        if "後上" in str(row['跑法']) or "後追" in str(row['跑法']):
+            score -= 0.5
+    else:
+        if "後上" in str(row['跑法']) or "後追" in str(row['跑法']):
+            score -= 2.0
+        if "大逃" in str(row['跑法']) or "逃放" in str(row['跑法']):
+            score += 4.5
+    
+    if distance <= 1200:
+        score *= 1.4
+    elif distance >= 2000:
+        score *= 0.6
+    
+    if venue == "跑馬地":
+        score *= 1.3
+    
+    if weather in ["小雨", "大雨"]:
+        if "後上" in str(row['跑法']) or "後追" in str(row['跑法']):
+            score += 2.0
+    
+    if race_class in ["一級賽", "二級賽"]:
+        score *= 0.7
+    elif race_class in ["四班", "五班"]:
+        score *= 1.2
+    
+    return score
+
+# ==================== Pace Scenario Analysis 功能 ====================
+def analyze_pace_scenario(horses_df):
+    front_runners = 0
+    prominent = 0
+    closers = 0
+    
+    for _, row in horses_df.iterrows():
+        run_style = str(row['跑法'])
+        if "大逃" in run_style or "逃放" in run_style:
+            front_runners += 1
+        if "前置" in run_style or "先行" in run_style:
+            prominent += 1
+        if "後上" in run_style or "後追" in run_style:
+            closers += 1
+    
+    total_horses = len(horses_df)
+    
+    if front_runners >= 4:
+        scenario = "False Pace（假前置型）"
+        adjustment = {'closer_bonus': 4.5, 'front_penalty': -2.5, 'description': '前置型馬過多，後上型馬優勢極大'}
+    elif front_runners >= 2:
+        scenario = "True Pace（真正前置型）"
+        adjustment = {'closer_bonus': 2.5, 'front_penalty': -1.0, 'description': '前置型馬適中，後上型馬有優勢'}
+    elif front_runners <= 1:
+        scenario = "Slow Pace（慢前置型）"
+        adjustment = {'closer_bonus': -1.5, 'front_bonus': 3.5, 'description': '前置型馬過少，前置型馬優勢大'}
+    else:
+        scenario = "Even Pace（平均型）"
+        adjustment = {'closer_bonus': 0.5, 'front_bonus': 0.5, 'description': '配速平均'}
+    
+    return {
+        'scenario': scenario,
+        'front_runners': front_runners,
+        'prominent': prominent,
+        'closers': closers,
+        'adjustment': adjustment,
+        'total_horses': total_horses
+    }
+
+# ==================== Pace Model Weight Sensitivity Analysis 功能 ====================
+def pace_model_sensitivity_analysis(horses_df, param_name, param_range, base_params):
+    """
+    配速模型權重敏感度分析
+    測試不同參數值對模擬結果嘅影響
+    """
+    results = []
+    
+    for param_value in param_range:
+        # 創建測試用嘅參數
+        test_params = base_params.copy()
+        test_params[param_name] = param_value
+        
+        # 運行簡化模擬（1000 次迭代）
+        scores = []
+        for _, row in horses_df.iterrows():
+            score = 0
+            # 簡化版計算
+            if param_name == 'closer_bonus':
+                if "後上" in str(row['跑法']) or "後追" in str(row['跑法']):
+                    score += param_value
+            elif param_name == 'front_penalty':
+                if "大逃" in str(row['跑法']) or "逃放" in str(row['跑法']):
+                    score += param_value
+            elif param_name == 'distance_factor':
+                if horses_df.iloc[0]['distance'] <= 1200:
+                    score *= param_value
+            
+            scores.append(score)
+        
+        results.append({
+            'param_value': param_value,
+            'avg_score': np.mean(scores),
+            'std_score': np.std(scores),
+            'max_score': np.max(scores),
+            'min_score': np.min(scores)
+        })
+    
+    return pd.DataFrame(results)
+
+# ==================== Simplified GNN Model 功能 ====================
+class SimplifiedGNN:
+    """
+    簡化版 GNN 模型
+    用於演示 GNN 概念，實際應用需要 PyTorch Geometric
+    """
+    def __init__(self):
+        self.node_features = {}
+        self.edge_weights = {}
+    
+    def build_graph(self, horses_df):
+        """構建賽事圖"""
+        self.node_features = {}
+        self.edge_weights = {}
+        
+        for idx, row in horses_df.iterrows():
+            horse_id = row['馬號']
+            # 節點特徵：實力、跑法、檔位、近況
+            self.node_features[horse_id] = {
+                'power': row['實力'],
+                'running_style': str(row['跑法']),
+                'barrier': row['檔位'],
+                'recent_form': row['近況']
+            }
+        
+        # 建立邊（馬匹之間嘅關係）
+        horse_ids = list(horses_df['馬號'])
+        for i, h1 in enumerate(horse_ids):
+            for h2 in horse_ids[i+1:]:
+                # 計算邊權重（相似度）
+                weight = self._calculate_edge_weight(h1, h2, horses_df)
+                self.edge_weights[(h1, h2)] = weight
+                self.edge_weights[(h2, h1)] = weight
+    
+    def _calculate_edge_weight(self, h1, h2, horses_df):
+        """計算兩匹馬之間嘅邊權重"""
+        row1 = horses_df[horses_df['馬號'] == h1].iloc[0]
+        row2 = horses_df[horses_df['馬號'] == h2].iloc[0]
+        
+        weight = 0.0
+        
+        # 跑法相似度
+        if str(row1['跑法']) == str(row2['跑法']):
+            weight += 2.0
+        
+        # 檔位相近
+        if abs(row1['檔位'] - row2['檔位']) <= 2:
+            weight += 1.0
+        
+        # 近況相近
+        if abs(row1['近況'] - row2['近況']) <= 2:
+            weight += 1.0
+        
+        return weight
+    
+    def message_passing(self, horse_id, iterations=2):
+        """訊息傳遞"""
+        if horse_id not in self.node_features:
+            return 0.0
+        
+        current_score = self.node_features[horse_id]['power']
+        
+        for _ in range(iterations):
+            # 收集鄰居訊息
+            neighbor_messages = []
+            for (h1, h2), weight in self.edge_weights.items():
+                if h1 == horse_id:
+                    neighbor_power = self.node_features.get(h2, {}).get('power', 0)
+                    neighbor_messages.append(neighbor_power * weight * 0.1)
+            
+            # 更新節點表示
+            if neighbor_messages:
+                current_score += np.mean(neighbor_messages)
+        
+        return current_score
 
 # ==================== 賽事資訊 ====================
 st.subheader("📝 賽事資訊")
@@ -191,9 +390,23 @@ if st.session_state.get('generated', False):
             if len(valid_horses) < 3:
                 st.error("⚠️ 至少需要 3 匹馬填寫完整資料先可以模擬！")
             else:
+                # ==================== Pace Scenario Analysis ====================
+                pace_analysis = analyze_pace_scenario(valid_horses)
+                
+                st.subheader("📊 Pace Scenario Analysis（配速情景分析）")
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("配速情景", pace_analysis['scenario'])
+                with col2:
+                    st.metric("前置型馬數量", f"{pace_analysis['front_runners']} 匹")
+                with col3:
+                    st.metric("後上型馬數量", f"{pace_analysis['closers']} 匹")
+                
+                st.info(f"💡 {pace_analysis['adjustment']['description']}")
+                
                 # ==================== 讀取學習數據並應用 ====================
                 learned_data = load_learned_data()
-                horse_biases = learned_data.get('horse_biases', {})
                 learning_patterns = learned_data.get('learning_patterns', {
                     'rainy_weather_closers': 0.0,
                     'happy_valley_inner_barrier': 0.0,
@@ -202,32 +415,37 @@ if st.session_state.get('generated', False):
                 })
                 race_history = learned_data.get('race_history', [])
                 
-                # 創建新欄位儲存調整後嘅實力
                 valid_horses['實力_調整後'] = valid_horses['實力'].astype(float)
                 
-                # 應用學習偏差
+                # 應用配速情景調整
+                pace_adj = pace_analysis['adjustment']
                 for idx, row in valid_horses.iterrows():
-                    horse_str = str(row['馬號'])
-                    if horse_str in horse_biases:
-                        valid_horses.loc[idx, '實力_調整後'] += horse_biases[horse_str] * 0.5
+                    run_style = str(row['跑法'])
+                    
+                    if 'closer_bonus' in pace_adj and ("後上" in run_style or "後追" in run_style):
+                        valid_horses.loc[idx, '實力_調整後'] += pace_adj['closer_bonus']
+                    
+                    if 'front_bonus' in pace_adj and ("大逃" in run_style or "逃放" in run_style or "前置" in run_style):
+                        valid_horses.loc[idx, '實力_調整後'] += pace_adj['front_bonus']
+                    
+                    if 'front_penalty' in pace_adj and ("大逃" in run_style or "逃放" in run_style):
+                        valid_horses.loc[idx, '實力_調整後'] += pace_adj['front_penalty']
                 
-                # ==================== 賽事級學習：搵相似歷史賽事 ====================
+                # 賽事級學習調整
                 current_signature = {
                     'venue': venue,
                     'distance': distance,
                     'weather': weather,
                     'track': track,
                     'race_class': race_class,
-                    'front_runners': sum(1 for _, r in valid_horses.iterrows() if "大逃" in str(r['跑法']) or "逃放" in str(r['跑法']))
+                    'front_runners': pace_analysis['front_runners']
                 }
                 
-                # 搵相似賽事並調整
                 race_adjustment = 0.0
                 similar_races = 0
                 
                 for past_race in race_history:
                     past_sig = past_race.get('signature', {})
-                    # 簡單相似度計算
                     similarity = 0
                     if past_sig.get('venue') == venue: similarity += 2
                     if abs(past_sig.get('distance', 0) - distance) < 400: similarity += 1
@@ -251,7 +469,7 @@ if st.session_state.get('generated', False):
                     valid_horses['騎師質量'] * 1.3 +
                     valid_horses['近況'] * 1.6 +
                     (15 - (valid_horses['檔位']-1)*0.2) +
-                    race_adjustment  # 應用賽事級學習調整
+                    race_adjustment
                 )
                 
                 def gnn_interaction(row):
@@ -266,6 +484,11 @@ if st.session_state.get('generated', False):
                     if "大逃" in str(row['跑法']): score += 2.0
                     if "後上" in str(row['跑法']) or "後追" in str(row['跑法']): score += 1.5
                     if "居中" in str(row['跑法']): score += 1.3
+                    
+                    # 應用優化版 Pace Model
+                    front_runners = pace_analysis['front_runners']
+                    pace_score = optimized_pace_model(row, front_runners, distance, venue, weather, race_class)
+                    score += pace_score
                     
                     # 應用學習模式
                     if weather in ["小雨", "大雨"] and track == "草地":
@@ -308,27 +531,6 @@ if st.session_state.get('generated', False):
                                 score += 1.5 * (turn_count - 2)
                             if "大逃" in str(row['跑法']):
                                 score -= 0.8 * (turn_count - 2)
-                    
-                    # Pace Model
-                    front_runners = sum(1 for _, r in valid_horses.iterrows() if "大逃" in str(r['跑法']) or "逃放" in str(r['跑法']))
-                    
-                    if front_runners >= 2:
-                        if "後上" in str(row['跑法']) or "後追" in str(row['跑法']): score += 3.5
-                        if "大逃" in str(row['跑法']) or "逃放" in str(row['跑法']): score -= 2.5
-                    elif front_runners == 1:
-                        if "大逃" in str(row['跑法']) or "逃放" in str(row['跑法']): score += 1.5
-                    else:
-                        if "後上" in str(row['跑法']) or "後追" in str(row['跑法']): score += 2.0
-                    
-                    if distance <= 1200:
-                        if "大逃" in str(row['跑法']) or "逃放" in str(row['跑法']): score += 3.5
-                        if "後上" in str(row['跑法']) or "後追" in str(row['跑法']): score -= 2.0
-                    elif distance >= 2000:
-                        if "居中" in str(row['跑法']) or "後上" in str(row['跑法']) or "後追" in str(row['跑法']): score += 3.0
-                        if "大逃" in str(row['跑法']) or "逃放" in str(row['跑法']): score -= 1.8
-                        score += (row['實力_調整後'] + row['近況'] - 100) * 0.04
-                    else:
-                        if "居中" in str(row['跑法']): score += 1.2
                     
                     if track == "全天候":
                         if "大逃" in str(row['跑法']) or "逃放" in str(row['跑法']) or "前置" in str(row['跑法']): score += 1.8
@@ -471,9 +673,91 @@ if st.session_state.get('generated', False):
                     
                     st.write("")
                 
-                st.success("✅ 10次專業模擬完成！已結合 GNN + Pace Model + 全因素 + 賽事級學習")
+                st.success("✅ 10次專業模擬完成！已結合 GNN + Optimized Pace Model + 全因素 + 賽事級學習 + Pace Scenario Analysis")
     else:
         st.warning("⚠️ 至少需要 3 匹出賽馬先可以模擬！")
+
+# ==================== Pace Model Weight Sensitivity Analysis ====================
+st.divider()
+st.subheader("📊 Pace Model Weight Sensitivity Analysis（配速模型權重敏感度分析）")
+
+st.info("測試不同配速模型參數值對模擬結果嘅影響，幫助優化模型參數")
+
+col1, col2 = st.columns(2)
+with col1:
+    test_param = st.selectbox("選擇測試參數", 
+        ["closer_bonus（後上型加分）", "front_penalty（前置型減分）", "distance_factor（距離因子）"])
+with col2:
+    param_range = st.text_input("測試範圍（逗號分隔）", "2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0")
+
+if st.button("🔬 運行敏感度分析", type="primary"):
+    if len(active_horses) >= 3:
+        param_map = {
+            "closer_bonus（後上型加分）": "closer_bonus",
+            "front_penalty（前置型減分）": "front_penalty",
+            "distance_factor（距離因子）": "distance_factor"
+        }
+        
+        param_name = param_map[test_param]
+        param_values = [float(x.strip()) for x in param_range.split(',')]
+        
+        base_params = {'closer_bonus': 3.5, 'front_penalty': -2.5, 'distance_factor': 1.4}
+        
+        sensitivity_results = pace_model_sensitivity_analysis(valid_horses, param_name, param_values, base_params)
+        
+        st.subheader(f"📈 {test_param} 敏感度分析結果")
+        
+        # 顯示表格
+        st.dataframe(sensitivity_results, use_container_width=True)
+        
+        # 顯示圖表
+        fig = px.line(sensitivity_results, x='param_value', y='avg_score', 
+                      title=f"{test_param} 對平均分數嘅影響",
+                      markers=True)
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # 分析結論
+        max_change = sensitivity_results['avg_score'].max() - sensitivity_results['avg_score'].min()
+        st.info(f"💡 結論：{test_param} 變化範圍內，平均分數變化 {max_change:.2f} 分，敏感度 {'高' if max_change > 2 else '中' if max_change > 1 else '低'}")
+    else:
+        st.error("⚠️ 需要至少 3 匹馬先可以進行敏感度分析！")
+
+# ==================== GNN Neural Network Integration ====================
+st.divider()
+st.subheader("🧠 GNN Neural Network Integration（圖神經網絡整合）")
+
+st.info("簡化版 GNN 模型演示 - 用於理解 GNN 概念，完整版需要 PyTorch Geometric + 歷史數據")
+
+if st.button("🚀 運行 GNN 分析", type="primary"):
+    if len(active_horses) >= 3:
+        gnn = SimplifiedGNN()
+        gnn.build_graph(valid_horses)
+        
+        st.subheader("📊 GNN 圖結構分析")
+        
+        st.write(f"**節點數量：** {len(gnn.node_features)} 匹馬")
+        st.write(f"**邊數量：** {len(gnn.edge_weights) // 2} 條關係")
+        
+        # 顯示 GNN 計算結果
+        st.subheader("📈 GNN 訊息傳遞結果")
+        
+        gnn_results = []
+        for horse_id in valid_horses['馬號']:
+            gnn_score = gnn.message_passing(horse_id)
+            original_power = valid_horses[valid_horses['馬號'] == horse_id].iloc[0]['實力']
+            gnn_results.append({
+                '馬號': horse_id,
+                '原始實力': original_power,
+                'GNN 調整後': round(gnn_score, 1),
+                '差異': round(gnn_score - original_power, 1)
+            })
+        
+        gnn_df = pd.DataFrame(gnn_results)
+        st.dataframe(gnn_df, use_container_width=True)
+        
+        st.success("✅ GNN 分析完成！呢個係簡化版演示，完整版需要歷史數據訓練。")
+    else:
+        st.error("⚠️ 需要至少 3 匹馬先可以進行 GNN 分析！")
 
 # ==================== 真實賽果輸入 + 賽事級學習 ====================
 st.divider()
@@ -494,8 +778,6 @@ if st.button("📚 輸入真實賽果並學習", type="primary"):
             
             learned_data = load_learned_data()
             
-            if 'horse_biases' not in learned_data:
-                learned_data['horse_biases'] = {}
             if 'learning_patterns' not in learned_data:
                 learned_data['learning_patterns'] = {
                     'rainy_weather_closers': 0.0,
@@ -506,16 +788,6 @@ if st.button("📚 輸入真實賽果並學習", type="primary"):
             if 'race_history' not in learned_data:
                 learned_data['race_history'] = []
             
-            # 更新馬號偏差
-            for rank, horse in enumerate(finish_order, 1):
-                horse_str = str(horse)
-                if horse_str not in learned_data['horse_biases']:
-                    learned_data['horse_biases'][horse_str] = 0.0
-                
-                bias_adjustment = (10 - rank) * 0.3
-                learned_data['horse_biases'][horse_str] += bias_adjustment
-            
-            # 創建賽事記錄
             current_signature = {
                 'venue': venue,
                 'distance': distance,
@@ -525,19 +797,16 @@ if st.button("📚 輸入真實賽果並學習", type="primary"):
                 'front_runners': sum(1 for _, r in df.iterrows() if "大逃" in str(r['跑法']) or "逃放" in str(r['跑法']))
             }
             
-            # 計算預測誤差（如果有模擬數據）
             prediction_error = 0.0
             if 'last_simulation' in st.session_state:
                 last_sim = st.session_state['last_simulation']
-                # 簡單誤差計算
                 if finish_order:
                     winner = finish_order[0]
                     if winner in last_sim.get('predicted_winners', []):
-                        prediction_error = 0.0  # 預測正確
+                        prediction_error = 0.0
                     else:
-                        prediction_error = -2.0  # 預測錯誤
+                        prediction_error = -2.0
             
-            # 創建賽事記錄
             race_record = {
                 'race_id': f"{venue}_{distance}_{weather}_{len(learned_data['race_history'])}",
                 'signature': current_signature,
@@ -547,7 +816,6 @@ if st.button("📚 輸入真實賽果並學習", type="primary"):
                 'lesson': '從呢場賽事學到嘅教訓'
             }
             
-            # 分析贏家特徵
             winner = finish_order[0] if finish_order else None
             if winner:
                 winner_row = df[df['馬號'] == winner]
@@ -560,20 +828,18 @@ if st.button("📚 輸入真實賽果並學習", type="primary"):
                     elif "大逃" in winner_run or "逃放" in winner_run:
                         race_record['actual_winner_type'] = '前置型'
             
-            # 儲存賽事記錄
             learned_data['race_history'].append(race_record)
             
-            # 限制歷史記錄數量（最多保留50場）
             if len(learned_data['race_history']) > 50:
                 learned_data['race_history'] = learned_data['race_history'][-50:]
             
             save_learned_data(learned_data)
             
-            st.success(f"✅ 賽事級學習完成！已記錄賽事 + 更新 {len(finish_order)} 匹馬 + 模式")
-            st.info(f"📊 目前學習數據：{len(learned_data['horse_biases'])} 匹馬 + {len(learned_data['race_history'])} 場賽事")
+            st.success(f"✅ 賽事級學習完成！已記錄賽事 + 更新模式")
+            st.info(f"📊 目前學習數據：{len(learned_data['race_history'])} 場賽事")
             
         except Exception as e:
             st.error(f"⚠️ 解析失敗：{str(e)}")
 
 st.divider()
-st.caption("💡 最終專業版：全因素 + Pace Model + 詳細投注統計 + 詳細馬匹分析 + 賽事級學習")
+st.caption("💡 最終專業版：全因素 + Optimized Pace Model + 詳細投注統計 + 詳細馬匹分析 + 賽事級學習 + Pace Scenario Analysis + Weight Sensitivity + GNN Integration")
