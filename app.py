@@ -9,7 +9,7 @@ import os
 st.set_page_config(page_title="HKJC Race Simulator Pro", page_icon="🏇", layout="wide")
 
 st.title("🏇 HKJC Race Simulator Pro（最終專業版）")
-st.caption("GNN + Pace Model + 全因素模擬 + 詳細投注統計 + 詳細馬匹分析 + 模式學習")
+st.caption("GNN + Pace Model + 全因素模擬 + 詳細投注統計 + 詳細馬匹分析 + 賽事級學習")
 
 # ==================== JSON 檔案儲存功能 ====================
 DATA_FILE = "learned_data.json"
@@ -200,6 +200,7 @@ if st.session_state.get('generated', False):
                     'long_distance_stamina': 0.0,
                     'high_class_jockey': 0.0
                 })
+                race_history = learned_data.get('race_history', [])
                 
                 # 創建新欄位儲存調整後嘅實力
                 valid_horses['實力_調整後'] = valid_horses['實力'].astype(float)
@@ -210,6 +211,36 @@ if st.session_state.get('generated', False):
                     if horse_str in horse_biases:
                         valid_horses.loc[idx, '實力_調整後'] += horse_biases[horse_str] * 0.5
                 
+                # ==================== 賽事級學習：搵相似歷史賽事 ====================
+                current_signature = {
+                    'venue': venue,
+                    'distance': distance,
+                    'weather': weather,
+                    'track': track,
+                    'race_class': race_class,
+                    'front_runners': sum(1 for _, r in valid_horses.iterrows() if "大逃" in str(r['跑法']) or "逃放" in str(r['跑法']))
+                }
+                
+                # 搵相似賽事並調整
+                race_adjustment = 0.0
+                similar_races = 0
+                
+                for past_race in race_history:
+                    past_sig = past_race.get('signature', {})
+                    # 簡單相似度計算
+                    similarity = 0
+                    if past_sig.get('venue') == venue: similarity += 2
+                    if abs(past_sig.get('distance', 0) - distance) < 400: similarity += 1
+                    if past_sig.get('weather') == weather: similarity += 2
+                    if past_sig.get('track') == track: similarity += 1
+                    
+                    if similarity >= 3:
+                        similar_races += 1
+                        race_adjustment += past_race.get('prediction_error', 0) * 0.1
+                
+                if similar_races > 0:
+                    race_adjustment = race_adjustment / similar_races
+                
                 # ==================== 計算實力分 ====================
                 valid_horses = valid_horses.copy()
                 
@@ -219,7 +250,8 @@ if st.session_state.get('generated', False):
                     (valid_horses['負磅'] - 120) * -0.04 +
                     valid_horses['騎師質量'] * 1.3 +
                     valid_horses['近況'] * 1.6 +
-                    (15 - (valid_horses['檔位']-1)*0.2)
+                    (15 - (valid_horses['檔位']-1)*0.2) +
+                    race_adjustment  # 應用賽事級學習調整
                 )
                 
                 def gnn_interaction(row):
@@ -439,13 +471,13 @@ if st.session_state.get('generated', False):
                     
                     st.write("")
                 
-                st.success("✅ 10次專業模擬完成！已結合 GNN + Pace Model + 全因素 + 模式學習")
+                st.success("✅ 10次專業模擬完成！已結合 GNN + Pace Model + 全因素 + 賽事級學習")
     else:
         st.warning("⚠️ 至少需要 3 匹出賽馬先可以模擬！")
 
-# ==================== 真實賽果輸入 + 模式學習 ====================
+# ==================== 真實賽果輸入 + 賽事級學習 ====================
 st.divider()
-st.subheader("📝 輸入真實賽果並模式學習")
+st.subheader("📝 輸入真實賽果並賽事級學習")
 
 st.info("格式範例：2,3,4,5,9,11,8,6,7,10_1,12\n（_ 前面係名次順序，_ 後面係中途退出馬號）")
 
@@ -471,6 +503,8 @@ if st.button("📚 輸入真實賽果並學習", type="primary"):
                     'long_distance_stamina': 0.0,
                     'high_class_jockey': 0.0
                 }
+            if 'race_history' not in learned_data:
+                learned_data['race_history'] = []
             
             # 更新馬號偏差
             for rank, horse in enumerate(finish_order, 1):
@@ -481,53 +515,65 @@ if st.button("📚 輸入真實賽果並學習", type="primary"):
                 bias_adjustment = (10 - rank) * 0.3
                 learned_data['horse_biases'][horse_str] += bias_adjustment
             
-            # 模式學習：分析這場賽事嘅特徵
-            venue = st.session_state.get('venue', '沙田')
-            track = st.session_state.get('track', '草地')
-            distance = st.session_state.get('distance', 1600)
-            weather = st.session_state.get('weather', '晴天')
-            race_class = st.session_state.get('race_class', '五班')
+            # 創建賽事記錄
+            current_signature = {
+                'venue': venue,
+                'distance': distance,
+                'weather': weather,
+                'track': track,
+                'race_class': race_class,
+                'front_runners': sum(1 for _, r in df.iterrows() if "大逃" in str(r['跑法']) or "逃放" in str(r['跑法']))
+            }
             
-            # 計算實際贏家嘅特徵
-            winner = finish_order[0]  # 第一名馬號
+            # 計算預測誤差（如果有模擬數據）
+            prediction_error = 0.0
+            if 'last_simulation' in st.session_state:
+                last_sim = st.session_state['last_simulation']
+                # 簡單誤差計算
+                if finish_order:
+                    winner = finish_order[0]
+                    if winner in last_sim.get('predicted_winners', []):
+                        prediction_error = 0.0  # 預測正確
+                    else:
+                        prediction_error = -2.0  # 預測錯誤
             
-            # 簡單模式學習邏輯
-            if weather in ["小雨", "大雨"] and track == "草地":
-                # 檢查贏家是否係後上型
+            # 創建賽事記錄
+            race_record = {
+                'race_id': f"{venue}_{distance}_{weather}_{len(learned_data['race_history'])}",
+                'signature': current_signature,
+                'prediction_error': prediction_error,
+                'actual_winner': finish_order[0] if finish_order else None,
+                'actual_winner_type': '未知',
+                'lesson': '從呢場賽事學到嘅教訓'
+            }
+            
+            # 分析贏家特徵
+            winner = finish_order[0] if finish_order else None
+            if winner:
                 winner_row = df[df['馬號'] == winner]
                 if not winner_row.empty:
                     winner_run = str(winner_row.iloc[0]['跑法'])
                     if "後上" in winner_run or "後追" in winner_run:
-                        learned_data['learning_patterns']['rainy_weather_closers'] += 0.2
+                        race_record['actual_winner_type'] = '後上型'
+                        if weather in ["小雨", "大雨"] and track == "草地":
+                            learned_data['learning_patterns']['rainy_weather_closers'] += 0.3
+                    elif "大逃" in winner_run or "逃放" in winner_run:
+                        race_record['actual_winner_type'] = '前置型'
             
-            if venue == "跑馬地":
-                winner_row = df[df['馬號'] == winner]
-                if not winner_row.empty:
-                    winner_draw = winner_row.iloc[0]['檔位']
-                    if winner_draw <= 3:
-                        learned_data['learning_patterns']['happy_valley_inner_barrier'] += 0.2
+            # 儲存賽事記錄
+            learned_data['race_history'].append(race_record)
             
-            if distance >= 2000:
-                winner_row = df[df['馬號'] == winner]
-                if not winner_row.empty:
-                    winner_run = str(winner_row.iloc[0]['跑法'])
-                    if "居中" in winner_run or "後上" in winner_run or "後追" in winner_run:
-                        learned_data['learning_patterns']['long_distance_stamina'] += 0.2
-            
-            if race_class in ["一級賽", "二級賽", "三級賽"]:
-                winner_row = df[df['馬號'] == winner]
-                if not winner_row.empty:
-                    winner_jockey = winner_row.iloc[0]['騎師質量']
-                    if winner_jockey >= 7:
-                        learned_data['learning_patterns']['high_class_jockey'] += 0.2
+            # 限制歷史記錄數量（最多保留50場）
+            if len(learned_data['race_history']) > 50:
+                learned_data['race_history'] = learned_data['race_history'][-50:]
             
             save_learned_data(learned_data)
             
-            st.success(f"✅ 模式學習完成！已更新 {len(finish_order)} 匹馬 + 4 個模式")
-            st.info(f"📊 目前學習數據：{len(learned_data['horse_biases'])} 匹馬")
+            st.success(f"✅ 賽事級學習完成！已記錄賽事 + 更新 {len(finish_order)} 匹馬 + 模式")
+            st.info(f"📊 目前學習數據：{len(learned_data['horse_biases'])} 匹馬 + {len(learned_data['race_history'])} 場賽事")
             
         except Exception as e:
             st.error(f"⚠️ 解析失敗：{str(e)}")
 
 st.divider()
-st.caption("💡 最終專業版：全因素 + Pace Model + 詳細投注統計 + 詳細馬匹分析 + 模式學習")
+st.caption("💡 最終專業版：全因素 + Pace Model + 詳細投注統計 + 詳細馬匹分析 + 賽事級學習")
